@@ -109,6 +109,11 @@ never from anywhere else — into `.obsidian/plugins/jexyllax-video-downloader/b
 | deno | `denoland/deno` | verified against the release's `.sha256sum` |
 | ffmpeg | `eugeneware/ffmpeg-static` (static builds of ffmpeg) | none published; the binary is run with `-version` after download |
 
+Releases of this plugin are published by a GitHub Actions workflow
+(`.github/workflows/release.yml`) that attaches build-provenance attestations
+to `main.js`, `manifest.json` and `styles.css`; you can verify a downloaded
+file with `gh attestation verify main.js --repo ppocass/obsidian-jexyllax-video-downloader`.
+
 A file whose SHA-256 does not match the published one is deleted, and the
 install fails visibly. On macOS the quarantine attribute is removed from the
 downloaded binary so that Gatekeeper lets it run. *Update* and *Reinstall* do

@@ -306,11 +306,13 @@ function tr(key) {
   return out;
 }
 
+/* « Suivre Obsidian » : la langue d'Obsidian se lit sur son instance de moment, pas besoin de localStorage. */
 function resolveLang(pref) {
   if (pref === 'fr' || pref === 'en') return pref;
   try {
-    const l = (window.localStorage && window.localStorage.getItem('language')) || 'en';
-    return l.startsWith('fr') ? 'fr' : 'en';
+    const m = require('obsidian').moment;
+    const l = (m && typeof m.locale === 'function' && m.locale()) || 'en';
+    return String(l).toLowerCase().startsWith('fr') ? 'fr' : 'en';
   } catch (e) { return 'en'; }
 }
 

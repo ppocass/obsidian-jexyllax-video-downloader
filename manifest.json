@@ -1,7 +1,7 @@
 {
   "id": "jexyllax-video-downloader",
   "name": "Video Downloader by Jexyllax",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "1.4.0",
   "description": "Download videos and whole series with yt-dlp, from a link’s context menu or a side panel, with subtitles cleaned up and embedded.",
   "author": "Pierre Pocass",

@@ -18,7 +18,7 @@ fichiers = sorted(glob.glob(os.path.join(racine, 'tests', '*.js')))
 h = """
 var module={exports:{}};
 function require(n){ if(n==='os') return { homedir: function(){ return '/Users/test'; } }; if(n!=='obsidian') throw new Error('require hors test : '+n); return { Plugin: class{}, ItemView: class{constructor(){}}, Modal: class{constructor(){}},
-  FuzzySuggestModal: class{constructor(){}}, Component: class{constructor(){}}, Notice: class{}, Menu: class{},
+  FuzzySuggestModal: class{constructor(){}}, Component: class{constructor(){}}, Notice: class{}, Menu: class{}, moment: { locale: function(){ return 'fr'; } },
   PluginSettingTab: class{constructor(){}}, Setting: class{constructor(){}}, setIcon: function(){},
   TFolder: class{}, TFile: class{} }; }
 var process={env:{HOME:"/Users/test"},platform:"darwin",arch:"arm64"};
