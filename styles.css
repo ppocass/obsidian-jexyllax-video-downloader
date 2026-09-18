@@ -1,0 +1,27 @@
+/* Video Downloader by Jexyllax — tout passe par les variables d'Obsidian, aucune couleur en dur. */
+
+.jxvd-modal .setting-item {
+  border-top: none;
+  padding: var(--size-2-3) 0;
+}
+
+.jxvd-modal .jxvd-wide,
+.setting-item-control .jxvd-wide {
+  width: 100%;
+  min-width: 260px;
+}
+
+.jxvd-modal .setting-item-control {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+.jxvd-status {
+  cursor: pointer;
+}
+
+.jxvd-status-icon svg {
+  width: var(--icon-xs);
+  height: var(--icon-xs);
+  vertical-align: -2px;
+}

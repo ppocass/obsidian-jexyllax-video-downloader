@@ -1,0 +1,10 @@
+{
+  "id": "jexyllax-video-downloader",
+  "name": "Video Downloader by Jexyllax",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Right-click a video link in a note to download it with yt-dlp: quality, container, subtitles and destination chosen once in the settings or per download.",
+  "author": "Pierre Pocass",
+  "isDesktopOnly": true,
+  "authorUrl": "https://github.com/ppocass"
+}
