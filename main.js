@@ -969,7 +969,8 @@ class Downloader {
     const job = this.current;
     if (!p || !job) return;
     if (p.phase === 'file') { job.file = p.file; job.files.push(p.file); this.notify(); return; }
-    if (p.file) job.file = p.file;
+    // le nom affiché suit le fichier vidéo, pas les sous-titres téléchargés avant lui
+    if (p.file && !/\.(srt|vtt|ass)$/i.test(p.file)) job.file = p.file;
     if (p.phase === 'error') job.error = p.message;
     if (p.phase === 'item') { job.item = { index: p.index, count: p.count }; }
     if (p.phase === 'download' && typeof p.pct === 'number') {

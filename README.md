@@ -11,6 +11,8 @@ three of them for you, in its own folder, from their official release pages.
 > **Status:** written and tested on macOS (Apple Silicon). Linux and Windows
 > builds are wired in but have not been tested yet.
 
+![Right-click a link, download it, then queue a whole series from the side panel](docs/demo.gif)
+
 ![Right-click on a link in a note: the two download entries](docs/screenshot-menu.png)
 
 ## Use
