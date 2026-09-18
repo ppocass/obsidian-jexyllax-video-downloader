@@ -6,7 +6,7 @@ const { Plugin, ItemView, Modal, Notice, PluginSettingTab, Setting, setIcon, req
 /*  Réglages et traductions                                           */
 /* ================================================================== */
 
-const HOME = (typeof process !== 'undefined' && process.env && (process.env.HOME || process.env.USERPROFILE)) || '';
+const HOME = (() => { try { return require('os').homedir(); } catch (e) { return ''; } })();
 
 const DEFAULT_SETTINGS = {
   language: 'auto',               // fr | en | auto (suit Obsidian)
