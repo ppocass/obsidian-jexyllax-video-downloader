@@ -15,8 +15,18 @@ everything is configurable in the settings.
   change what differs for this download: quality, format, subtitles, file name,
   destination folder (one of up to three folders from the settings, or any
   other path). Enter validates.
-- **Command palette**: download the link in the clipboard (with or without
-  options), cancel the current download.
+- **Side panel** (ribbon icon, or the command *Open the download panel*):
+  paste one link per line — videos or playlists — and download them all.
+  *Videos* mode uses the defaults; *Series* mode names the files
+  `Name S01E00001.mkv`, `…E00002`… in the order of the lines (a playlist
+  numbers each of its items), optionally followed by the video title, inside
+  `<series folder>/<Name>/`. Options (quality, format, subtitles, folder) fold
+  under the form. The list below shows every download with its state and
+  progress; a cross removes or cancels it.
+- **Command palette**: open the panel, download the link in the clipboard
+  (with or without options), cancel the current download.
+- Folder fields suggest existing folders as you type, like Obsidian's own
+  attachment folder setting.
 - **Status bar**: progress of the current download, number of queued ones;
   click to cancel. A notice announces the start, the end (with the file name)
   or the failure.
@@ -29,6 +39,8 @@ Downloads run one at a time; extra requests wait in a queue.
   embed subtitles as a track, WebM keeps a separate `.srt`), subtitles and
   their languages, keep the video title as file name.
 - Up to three destination folders; the first is the default.
+- Series: base folder, append the video title to episode names.
+- Show or hide the ribbon icon.
 - Tools: `yt-dlp` path, `ffmpeg` folder, subtitle clean-up script
   (`yt-subs-fix.py`, run once the file is written), browser cookies.
 - Offer the menu on every http(s) link, or only on the main video sites.
@@ -43,8 +55,8 @@ sh tests/run.sh
 ```
 
 They cover link detection under the cursor, the yt-dlp arguments (same options
-as the `movie` shell function), the parsing of yt-dlp's output, and the
-translation tables.
+as the `movie` and `tvshow` shell functions), series numbering, folder
+suggestions, the parsing of yt-dlp's output, and the translation tables.
 
 ## Licence
 

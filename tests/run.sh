@@ -17,7 +17,7 @@ cles = sorted(k for k in set(re.findall(r"(?<![A-Za-z0-9_])tr\('([^']+)'", src))
 fichiers = sorted(glob.glob(os.path.join(racine, 'tests', '*.js')))
 h = """
 var module={exports:{}};
-function require(n){ if(n!=='obsidian') throw new Error('require hors test : '+n); return { Plugin: class{}, Modal: class{constructor(){}},
+function require(n){ if(n!=='obsidian') throw new Error('require hors test : '+n); return { Plugin: class{}, ItemView: class{constructor(){}}, Modal: class{constructor(){}},
   FuzzySuggestModal: class{constructor(){}}, Component: class{constructor(){}}, Notice: class{}, Menu: class{},
   PluginSettingTab: class{constructor(){}}, Setting: class{constructor(){}}, setIcon: function(){},
   TFolder: class{}, TFile: class{} }; }

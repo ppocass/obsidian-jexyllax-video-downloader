@@ -1,6 +1,6 @@
 'use strict';
 
-const { Plugin, Modal, Notice, PluginSettingTab, Setting, setIcon } = require('obsidian');
+const { Plugin, ItemView, Modal, Notice, PluginSettingTab, Setting, setIcon } = require('obsidian');
 
 /* ================================================================== */
 /*  Réglages et traductions                                           */
@@ -25,6 +25,9 @@ const DEFAULT_SETTINGS = {
     { name: '', path: '' },
   ],
   menuOnAllLinks: true,           // proposer l'entrée sur tout lien http(s), pas seulement YouTube
+  showRibbon: true,               // icône du panneau dans la barre latérale
+  seriesBase: HOME + '/Downloads/TV Shows', // les séries vont dans <seriesBase>/<nom de la série>/
+  seriesTitle: false,             // ajouter le titre de la vidéo après le numéro d'épisode
 };
 
 let SETTINGS = Object.assign({}, DEFAULT_SETTINGS);
@@ -100,6 +103,41 @@ const STRINGS = {
     'set.cookies': 'Cookies du navigateur',
     'set.cookiesDesc': 'Réutilise la session du navigateur pour les vidéos qui demandent d\'être connecté.',
     'cookies.none': 'Aucun',
+    'view.title': 'Téléchargements de vidéos',
+    'view.urls': 'Liens',
+    'view.urlsDesc': 'Un lien par ligne : vidéo ou playlist. En mode Série, l\'ordre des lignes est l\'ordre des épisodes.',
+    'view.mode': 'Mode',
+    'mode.videos': 'Vidéos',
+    'mode.series': 'Série',
+    'view.seriesName': 'Nom de la série',
+    'view.season': 'Saison',
+    'view.startEpisode': 'Premier épisode',
+    'view.seriesTitle': 'Ajouter le titre de la vidéo au nom',
+    'view.seriesFolder': 'Dossier : %s',
+    'view.options': 'Options',
+    'view.download': 'Télécharger',
+    'view.downloadN': 'Télécharger (%s)',
+    'view.clear': 'Vider la liste',
+    'view.jobs': 'Téléchargements',
+    'view.empty': 'Aucun téléchargement.',
+    'view.noSeriesName': 'Indique le nom de la série.',
+    'view.noUrls': 'Aucun lien valide.',
+    'job.queued': 'En attente',
+    'job.running': 'En cours',
+    'job.done': 'Terminé',
+    'job.failed': 'Échec',
+    'job.cancelled': 'Annulé',
+    'job.remove': 'Retirer',
+    'job.cancel': 'Annuler',
+    'job.item': 'élément %s sur %s',
+    'cmd.openView': 'Ouvrir le panneau de téléchargement',
+    'set.showRibbon': 'Icône dans la barre latérale',
+    'set.showRibbonDesc': 'Ouvre le panneau où coller des liens et télécharger des séries. La commande reste disponible dans la palette.',
+    'set.series': 'Séries',
+    'set.seriesBase': 'Dossier des séries',
+    'set.seriesBaseDesc': 'Chaque série va dans son propre sous-dossier : « Nom de la série / Nom S01E00001.mkv ».',
+    'set.seriesTitle': 'Ajouter le titre de la vidéo au nom des épisodes',
+    'set.seriesTitleDesc': '« Nom S01E00001 - Titre.mkv » au lieu de « Nom S01E00001.mkv ». Modifiable à chaque envoi.',
   },
   en: {
     'menu.download': 'Download video',
@@ -170,6 +208,41 @@ const STRINGS = {
     'set.cookies': 'Browser cookies',
     'set.cookiesDesc': 'Reuses the browser session for videos that require being signed in.',
     'cookies.none': 'None',
+    'view.title': 'Video downloads',
+    'view.urls': 'Links',
+    'view.urlsDesc': 'One link per line: video or playlist. In Series mode, the order of the lines is the order of the episodes.',
+    'view.mode': 'Mode',
+    'mode.videos': 'Videos',
+    'mode.series': 'Series',
+    'view.seriesName': 'Series name',
+    'view.season': 'Season',
+    'view.startEpisode': 'First episode',
+    'view.seriesTitle': 'Append the video title to the name',
+    'view.seriesFolder': 'Folder: %s',
+    'view.options': 'Options',
+    'view.download': 'Download',
+    'view.downloadN': 'Download (%s)',
+    'view.clear': 'Clear the list',
+    'view.jobs': 'Downloads',
+    'view.empty': 'No downloads.',
+    'view.noSeriesName': 'Enter the series name.',
+    'view.noUrls': 'No valid link.',
+    'job.queued': 'Queued',
+    'job.running': 'Running',
+    'job.done': 'Done',
+    'job.failed': 'Failed',
+    'job.cancelled': 'Cancelled',
+    'job.remove': 'Remove',
+    'job.cancel': 'Cancel',
+    'job.item': 'item %s of %s',
+    'cmd.openView': 'Open the download panel',
+    'set.showRibbon': 'Icon in the side bar',
+    'set.showRibbonDesc': 'Opens the panel where you paste links and download series. The command stays available in the palette.',
+    'set.series': 'Series',
+    'set.seriesBase': 'Series folder',
+    'set.seriesBaseDesc': 'Each series gets its own sub-folder: "Series name / Name S01E00001.mkv".',
+    'set.seriesTitle': 'Append the video title to episode names',
+    'set.seriesTitleDesc': '"Name S01E00001 - Title.mkv" instead of "Name S01E00001.mkv". Can be changed on each submission.',
   },
 };
 
@@ -256,10 +329,27 @@ function buildArgs(job, s) {
     // --embed-subs est proscrit : c'est le script qui intègre les sous-titres, après nettoyage
     if (s.subsFixPath) args.push('--exec', 'after_move:' + shellQuote(s.subsFixPath) + ' {}');
   }
-  const name = job.filename ? safeName(job.filename) : '%(title)s';
+  let name;
+  if (job.series) {
+    // épisode : « Nom S01E00001 », le numéro suit avec --autonumber pour qu'une playlist numérote chaque élément
+    name = safeName(job.series) + ' S' + pad(job.season, 2) + 'E%(autonumber)05d' + (job.seriesTitle ? ' - %(title)s' : '');
+    args.push('--autonumber-start', String(job.episode || 1));
+  } else {
+    name = job.filename ? safeName(job.filename) : '%(title)s';
+  }
   args.push('-o', job.destination.replace(/\/+$/, '') + '/' + name + '.%(ext)s');
   args.push('--', job.url);
   return args;
+}
+
+function pad(n, width) {
+  const v = String(Math.max(0, parseInt(n, 10) || 0));
+  return v.length >= width ? v : '0'.repeat(width - v.length) + v;
+}
+
+/* Le nom d'un épisode tel que yt-dlp l'écrira (sans extension), pour l'afficher avant le téléchargement. */
+function episodeName(series, season, episode, title) {
+  return safeName(series) + ' S' + pad(season, 2) + 'E' + pad(episode, 5) + (title ? ' - ' + title : '');
 }
 
 /* Seule chaîne qui passe par un shell : le chemin du script dans --exec (yt-dlp l'exécute via sh). */
@@ -281,6 +371,7 @@ function parseLine(line) {
   if ((m = l.match(/^\[download\]\s+Destination:\s+(.+)$/))) return { phase: 'download', file: m[1] };
   if ((m = l.match(/^\[Merger\]\s+Merging formats into\s+"(.+)"$/))) return { phase: 'merge', file: m[1] };
   if (/^\[Exec\]/.test(l) || (/^\[(EmbedSubtitle|SubtitlesConvertor|FFmpegSubtitlesConvertor|info)\]/.test(l) && /subtitle/i.test(l))) return { phase: 'subs' };
+  if ((m = l.match(/^\[download\]\s+Downloading item\s+(\d+)\s+of\s+(\d+)/))) return { phase: 'item', index: Number(m[1]), count: Number(m[2]) };
   if ((m = l.match(/^ERROR:\s*(.+)$/))) return { phase: 'error', message: m[1] };
   return null;
 }
@@ -292,35 +383,68 @@ function parseLine(line) {
 class Downloader {
   constructor(plugin) {
     this.plugin = plugin;
-    this.queue = [];
-    this.current = null;   // { job, child, file, pct }
+    this.jobs = [];        // tous les travaux, dans l'ordre d'arrivée, avec leur état
+    this.current = null;   // le travail en cours
+    this.listeners = [];
+    this.seq = 0;
   }
 
+  onChange(fn) { this.listeners.push(fn); return () => { this.listeners = this.listeners.filter((f) => f !== fn); }; }
+  notify() { for (const fn of this.listeners) { try { fn(this); } catch (e) { /* un écouteur cassé n'arrête pas les autres */ } } }
+
+  get queue() { return this.jobs.filter((j) => j.state === 'queued'); }
+
   add(job) {
-    this.queue.push(job);
+    job.id = ++this.seq;
+    job.state = 'queued';
+    job.pct = 0;
+    job.file = '';
+    job.error = '';
+    job.item = null;
+    this.jobs.push(job);
     if (this.current) {
       new Notice(tr('notice.queued', this.queue.length));
       this.plugin.setStatus(this.statusText());
+      this.notify();
     } else {
       this.next();
     }
+    return job;
+  }
+
+  addAll(jobs) { for (const j of jobs) this.add(j); }
+
+  /* Retire un travail en attente, ou annule celui en cours. */
+  remove(id) {
+    const job = this.jobs.find((j) => j.id === id);
+    if (!job) return;
+    if (job.state === 'running') { this.cancel(); return; }
+    if (job.state === 'queued') job.state = 'cancelled';
+    else this.jobs = this.jobs.filter((j) => j.id !== id);
+    this.notify();
+  }
+
+  clearFinished() {
+    this.jobs = this.jobs.filter((j) => j.state === 'queued' || j.state === 'running');
+    this.notify();
   }
 
   next() {
-    const job = this.queue.shift();
-    if (!job) { this.current = null; this.plugin.setStatus(''); return; }
+    const job = this.queue[0];
+    if (!job) { this.current = null; this.plugin.setStatus(''); this.notify(); return; }
     this.run(job);
   }
 
   run(job) {
     let spawn;
     try { spawn = require('child_process').spawn; }
-    catch (e) { new Notice(tr('notice.failed', 'child_process')); this.current = null; return; }
+    catch (e) { job.state = 'failed'; job.error = 'child_process'; new Notice(tr('notice.failed', 'child_process')); this.current = null; this.notify(); return; }
 
     const fs = require('fs');
     if (!fs.existsSync(SETTINGS.ytdlpPath)) {
       new Notice(tr('notice.noBinary', SETTINGS.ytdlpPath), 8000);
-      this.current = null; this.plugin.setStatus(''); return;
+      job.state = 'failed'; job.error = tr('notice.noBinary', SETTINGS.ytdlpPath);
+      this.current = null; this.plugin.setStatus(''); this.notify(); return;
     }
     try { fs.mkdirSync(job.destination, { recursive: true }); } catch (e) { /* yt-dlp le dira */ }
 
@@ -328,14 +452,17 @@ class Downloader {
     const env = Object.assign({}, process.env);
     env.PATH = [SETTINGS.ffmpegDir, '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', env.PATH || ''].filter(Boolean).join(':');
 
-    this.current = { job, child: null, file: '', pct: 0, error: '' };
+    job.state = 'running';
+    job.child = null;
+    this.current = job;
     this.plugin.setStatus(tr('status.starting'));
-    new Notice(tr('notice.started', job.url));
+    new Notice(tr('notice.started', jobLabel(job)));
+    this.notify();
 
     let child;
     try { child = spawn(SETTINGS.ytdlpPath, args, { env, cwd: job.destination, windowsHide: true }); }
-    catch (e) { new Notice(tr('notice.failed', e.message)); this.next(); return; }
-    this.current.child = child;
+    catch (e) { job.state = 'failed'; job.error = e.message; new Notice(tr('notice.failed', e.message)); this.next(); return; }
+    job.child = child;
 
     let buf = '';
     const onData = (chunk) => {
@@ -346,33 +473,44 @@ class Downloader {
     };
     child.stdout.on('data', onData);
     child.stderr.on('data', onData);
-    child.on('error', (e) => { this.current.error = e.message; });
+    child.on('error', (e) => { job.error = e.message; });
     child.on('close', (code) => {
       if (buf) this.onLine(buf);
-      const cur = this.current;
-      if (cur && cur.cancelled) new Notice(tr('notice.cancelled'));
-      else if (code === 0) new Notice(tr('notice.done', baseName(cur.file || job.url)), 8000);
-      else new Notice(tr('notice.failed', cur.error || ('code ' + code)), 10000);
+      job.child = null;
+      if (job.cancelled) { job.state = 'cancelled'; new Notice(tr('notice.cancelled')); }
+      else if (code === 0) { job.state = 'done'; job.pct = 100; new Notice(tr('notice.done', baseName(job.file || job.url)), 8000); }
+      else { job.state = 'failed'; new Notice(tr('notice.failed', job.error || ('code ' + code)), 10000); }
+      // une playlist en mode Série a consommé plusieurs numéros : on décale les épisodes qui suivent
+      if (job.series && job.item && job.item.count > 1) {
+        const shift = job.item.count - 1;
+        for (const j of this.jobs) if (j.state === 'queued' && j.series === job.series && j.batch === job.batch) j.episode += shift;
+      }
       this.next();
     });
   }
 
   onLine(line) {
     const p = parseLine(line);
-    if (!p || !this.current) return;
-    if (p.file) this.current.file = p.file;
-    if (p.phase === 'error') this.current.error = p.message;
+    const job = this.current;
+    if (!p || !job) return;
+    if (p.file) job.file = p.file;
+    if (p.phase === 'error') job.error = p.message;
+    if (p.phase === 'item') { job.item = { index: p.index, count: p.count }; }
     if (p.phase === 'download' && typeof p.pct === 'number') {
-      this.current.pct = p.pct;
-      this.plugin.setStatus(tr('status.downloading', p.pct.toFixed(0) + ' %', p.eta ? 'ETA ' + p.eta : p.speed) + this.suffix());
+      job.pct = p.pct;
+      job.detail = p.eta ? 'ETA ' + p.eta : p.speed;
+      this.plugin.setStatus(tr('status.downloading', p.pct.toFixed(0) + ' %', job.detail) + this.suffix());
     } else if (p.phase === 'merge') {
+      job.detail = tr('status.merging');
       this.plugin.setStatus(tr('status.merging') + this.suffix());
     } else if (p.phase === 'subs') {
+      job.detail = tr('status.subs');
       this.plugin.setStatus(tr('status.subs') + this.suffix());
-    }
+    } else return;
+    this.notify();
   }
 
-  suffix() { return this.queue.length ? ' (+' + this.queue.length + ')' : ''; }
+  suffix() { const n = this.queue.length; return n ? ' (+' + n + ')' : ''; }
 
   statusText() {
     if (!this.current) return '';
@@ -380,15 +518,81 @@ class Downloader {
   }
 
   cancel() {
-    if (!this.current || !this.current.child) { new Notice(tr('notice.nothingRunning')); return; }
-    this.current.cancelled = true;
-    try { this.current.child.kill('SIGTERM'); } catch (e) { /* déjà terminé */ }
+    const job = this.current;
+    if (!job || !job.child) { new Notice(tr('notice.nothingRunning')); return; }
+    job.cancelled = true;
+    try { job.child.kill('SIGTERM'); } catch (e) { /* déjà terminé */ }
   }
+}
+
+/* Ce qu'on affiche pour un travail : le nom d'épisode, le nom imposé, ou le lien. */
+function jobLabel(job) {
+  if (job.series) return episodeName(job.series, job.season, job.episode);
+  if (job.filename) return safeName(job.filename);
+  return job.file ? baseName(job.file) : job.url;
 }
 
 function baseName(p) {
   const s = String(p || '');
   return s.slice(s.lastIndexOf('/') + 1);
+}
+
+/* ================================================================== */
+/*  Autocomplétion des dossiers du disque                             */
+/* ================================================================== */
+
+/* Sous-dossiers qui complètent ce qui est tapé : « ~/Dow » → « ~/Downloads ». Jamais de fichiers. */
+function folderSuggestions(typed, fs) {
+  fs = fs || require('fs');
+  const raw = String(typed || '');
+  const text = raw.trim() ? raw.trim() : '~/';
+  const expanded = expandHome(text);
+  const slash = expanded.lastIndexOf('/');
+  if (slash < 0) return [];
+  const dir = expanded.slice(0, slash) || '/';
+  const prefix = expanded.slice(slash + 1).toLowerCase();
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return []; }
+  const keepTilde = text.startsWith('~/');
+  const out = [];
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name.startsWith('.')) continue;
+    if (prefix && !e.name.toLowerCase().startsWith(prefix)) continue;
+    const full = (dir === '/' ? '' : dir) + '/' + e.name;
+    out.push(keepTilde ? '~' + full.slice(HOME.length) : full);
+  }
+  out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  return out.slice(0, 30);
+}
+
+/* Branche l'autocomplétion sur un champ texte ; repli sur un <datalist> si l'API n'existe pas. */
+function attachFolderSuggest(app, inputEl, onPick) {
+  let Base = null;
+  try { Base = require('obsidian').AbstractInputSuggest; } catch (e) { Base = null; }
+  if (Base) {
+    class FolderSuggest extends Base {
+      getSuggestions(query) { return folderSuggestions(query); }
+      renderSuggestion(value, el) { el.setText(value); }
+      selectSuggestion(value) {
+        inputEl.value = value + '/';
+        inputEl.trigger('input');
+        this.close();
+        if (onPick) onPick(value);
+      }
+    }
+    new FolderSuggest(app, inputEl);
+    return;
+  }
+  const list = document.createElement('datalist');
+  list.id = 'jxvd-folders-' + Math.random().toString(36).slice(2);
+  document.body.appendChild(list);
+  inputEl.setAttribute('list', list.id);
+  inputEl.addEventListener('input', () => {
+    list.innerHTML = '';
+    for (const v of folderSuggestions(inputEl.value)) {
+      const o = document.createElement('option'); o.value = v; list.appendChild(o);
+    }
+  });
 }
 
 /* ================================================================== */
@@ -480,6 +684,7 @@ class OptionsModal extends Modal {
     otherRow = new Setting(contentEl).setName(tr('modal.otherFolder')).setDesc(tr('modal.otherFolderDesc')).addText((t) => {
       t.setValue(currentKey() === 'other' ? this.job.destination : '').onChange((v) => { this.job.destination = expandHome(v.trim()); });
       t.inputEl.addClass('jxvd-wide');
+      attachFolderSuggest(this.app, t.inputEl);
     });
     if (currentKey() !== 'other') otherRow.settingEl.hide();
 
@@ -499,6 +704,202 @@ class OptionsModal extends Modal {
   }
 
   onClose() { this.contentEl.empty(); }
+}
+
+/* ================================================================== */
+/*  Panneau latéral : coller des liens, télécharger des séries        */
+/* ================================================================== */
+
+const VIEW_TYPE = 'jexyllax-video-downloader';
+
+/* Les travaux à créer à partir du panneau : un par ligne, numérotés en mode Série. */
+function jobsFromPanel(form, s) {
+  s = s || SETTINGS;
+  const urls = String(form.text || '').split(/\r?\n/).map(cleanUrl).filter((u) => /^https?:\/\//i.test(u));
+  if (!urls.length) return { error: 'view.noUrls', jobs: [] };
+  const batch = Date.now();
+  if (form.mode === 'series') {
+    const series = safeName(form.seriesName);
+    if (!series) return { error: 'view.noSeriesName', jobs: [] };
+    const season = Math.max(1, parseInt(form.season, 10) || 1);
+    let episode = Math.max(1, parseInt(form.startEpisode, 10) || 1);
+    const base = expandHome((form.seriesBase || s.seriesBase || HOME + '/Downloads/TV Shows').replace(/\/+$/, ''));
+    return { jobs: urls.map((url) => ({
+      url, quality: form.quality, container: form.container, subtitles: !!form.subtitles, subLangs: s.subLangs,
+      filename: '', destination: base + '/' + series,
+      series, season, episode: episode++, seriesTitle: !!form.seriesTitle, batch,
+    })) };
+  }
+  return { jobs: urls.map((url) => Object.assign(defaultJob(url, s), {
+    quality: form.quality, container: form.container, subtitles: !!form.subtitles, destination: form.destination || defaultJob(url, s).destination, batch,
+  })) };
+}
+
+class DownloadView extends ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.plugin = plugin;
+    this.form = null;
+  }
+
+  getViewType() { return VIEW_TYPE; }
+  getDisplayText() { return tr('view.title'); }
+  getIcon() { return 'download'; }
+
+  async onOpen() {
+    this.unsubscribe = this.plugin.downloader.onChange(() => this.renderJobs());
+    this.render();
+  }
+
+  async onClose() {
+    if (this.unsubscribe) this.unsubscribe();
+  }
+
+  /* Le formulaire ne se reconstruit que sur demande ; la liste des travaux, à chaque changement. */
+  render() {
+    const root = this.contentEl;
+    root.empty();
+    root.addClass('jxvd-view');
+    const s = SETTINGS;
+    if (!this.form) {
+      const dests = destinationsList(s);
+      this.form = { text: '', mode: 'videos', seriesName: '', season: 1, startEpisode: 1, seriesTitle: !!s.seriesTitle,
+        seriesBase: s.seriesBase, quality: s.quality, container: s.container, subtitles: !!s.subtitles,
+        destination: dests.length ? dests[0].path : HOME + '/Downloads' };
+    }
+    const f = this.form;
+
+    root.createEl('h4', { text: tr('view.title') });
+
+    const urls = root.createEl('textarea', { cls: 'jxvd-urls', attr: { rows: 5, placeholder: 'https://…' } });
+    urls.value = f.text;
+    urls.addEventListener('input', () => { f.text = urls.value; this.updateButton(); });
+    root.createEl('div', { cls: 'setting-item-description jxvd-help', text: tr('view.urlsDesc') });
+
+    new Setting(root).setName(tr('view.mode')).addDropdown((d) => d
+      .addOptions({ videos: tr('mode.videos'), series: tr('mode.series') })
+      .setValue(f.mode)
+      .onChange((v) => { f.mode = v; this.render(); }));
+
+    if (f.mode === 'series') {
+      const box = root.createDiv({ cls: 'jxvd-series' });
+      new Setting(box).setName(tr('view.seriesName')).addText((t) => {
+        t.setValue(f.seriesName).onChange((v) => { f.seriesName = v; this.updateFolderHint(); });
+        t.inputEl.addClass('jxvd-wide');
+        window.setTimeout(() => t.inputEl.focus(), 0);
+      });
+      new Setting(box).setName(tr('view.season')).addText((t) => {
+        t.setValue(String(f.season)).onChange((v) => { f.season = parseInt(v, 10) || 1; });
+        t.inputEl.type = 'number'; t.inputEl.min = '1'; t.inputEl.addClass('jxvd-num');
+      });
+      new Setting(box).setName(tr('view.startEpisode')).addText((t) => {
+        t.setValue(String(f.startEpisode)).onChange((v) => { f.startEpisode = parseInt(v, 10) || 1; });
+        t.inputEl.type = 'number'; t.inputEl.min = '1'; t.inputEl.addClass('jxvd-num');
+      });
+      new Setting(box).setName(tr('view.seriesTitle')).addToggle((c) => c.setValue(f.seriesTitle).onChange((v) => { f.seriesTitle = v; }));
+      new Setting(box).setName(tr('set.seriesBase')).addText((t) => {
+        t.setValue(f.seriesBase || '').onChange((v) => { f.seriesBase = v.trim(); this.updateFolderHint(); });
+        t.inputEl.addClass('jxvd-wide');
+        attachFolderSuggest(this.app, t.inputEl);
+      });
+      this.folderHint = box.createEl('div', { cls: 'setting-item-description jxvd-help' });
+      this.updateFolderHint();
+    }
+
+    const details = root.createEl('details', { cls: 'jxvd-options' });
+    details.createEl('summary', { text: tr('view.options') });
+    new Setting(details).setName(tr('modal.quality')).addDropdown((d) => d
+      .addOptions({ '720': '720p', '1080': '1080p', '1440': '1440p' }).setValue(String(f.quality)).onChange((v) => { f.quality = v; }));
+    new Setting(details).setName(tr('modal.container')).addDropdown((d) => d
+      .addOptions({ mkv: tr('container.mkv'), mp4: tr('container.mp4'), webm: tr('container.webm') }).setValue(f.container).onChange((v) => { f.container = v; }));
+    new Setting(details).setName(tr('modal.subtitles')).addToggle((c) => c.setValue(f.subtitles).onChange((v) => { f.subtitles = v; }));
+    if (f.mode !== 'series') {
+      const dests = destinationsList(s);
+      const options = {};
+      dests.forEach((d, i) => { options['d' + i] = d.name; });
+      options.other = tr('modal.otherFolder');
+      const idx = dests.findIndex((d) => d.path === f.destination);
+      let otherRow = null;
+      new Setting(details).setName(tr('modal.destination')).addDropdown((d) => d
+        .addOptions(options).setValue(idx >= 0 ? 'd' + idx : 'other')
+        .onChange((v) => {
+          if (v === 'other') { otherRow.settingEl.show(); }
+          else { f.destination = dests[Number(v.slice(1))].path; otherRow.settingEl.hide(); }
+        }));
+      otherRow = new Setting(details).setName(tr('modal.otherFolder')).addText((t) => {
+        t.setValue(idx >= 0 ? '' : f.destination).onChange((v) => { f.destination = expandHome(v.trim()); });
+        t.inputEl.addClass('jxvd-wide');
+        attachFolderSuggest(this.app, t.inputEl);
+      });
+      if (idx >= 0) otherRow.settingEl.hide();
+    }
+
+    const actions = root.createDiv({ cls: 'jxvd-actions' });
+    this.button = actions.createEl('button', { cls: 'mod-cta', text: tr('view.download') });
+    this.button.addEventListener('click', () => this.submit());
+    this.updateButton();
+
+    root.createEl('h5', { text: tr('view.jobs') });
+    this.jobsEl = root.createDiv({ cls: 'jxvd-jobs' });
+    this.renderJobs();
+  }
+
+  updateFolderHint() {
+    if (!this.folderHint) return;
+    const f = this.form;
+    const base = expandHome((f.seriesBase || SETTINGS.seriesBase || '').replace(/\/+$/, ''));
+    this.folderHint.setText(tr('view.seriesFolder', base + '/' + (safeName(f.seriesName) || '…') + '/' + episodeName(f.seriesName || '…', f.season, f.startEpisode) + '.' + f.container));
+  }
+
+  updateButton() {
+    if (!this.button) return;
+    const n = String(this.form.text || '').split(/\r?\n/).map(cleanUrl).filter((u) => /^https?:\/\//i.test(u)).length;
+    this.button.setText(n > 1 ? tr('view.downloadN', n) : tr('view.download'));
+  }
+
+  submit() {
+    const r = jobsFromPanel(this.form, SETTINGS);
+    if (r.error) { new Notice(tr(r.error)); return; }
+    this.plugin.downloader.addAll(r.jobs);
+    this.form.text = '';
+    const ta = this.contentEl.querySelector('.jxvd-urls');
+    if (ta) ta.value = '';
+    this.updateButton();
+  }
+
+  renderJobs() {
+    const el = this.jobsEl;
+    if (!el) return;
+    el.empty();
+    const dl = this.plugin.downloader;
+    if (!dl.jobs.length) { el.createEl('div', { cls: 'setting-item-description', text: tr('view.empty') }); return; }
+    for (const job of dl.jobs.slice().reverse()) {
+      const row = el.createDiv({ cls: 'jxvd-job jxvd-job-' + job.state });
+      const head = row.createDiv({ cls: 'jxvd-job-head' });
+      head.createSpan({ cls: 'jxvd-job-name', text: jobLabel(job), attr: { title: job.url } });
+      const btn = head.createSpan({ cls: 'jxvd-job-btn clickable-icon', attr: { 'aria-label': job.state === 'running' ? tr('job.cancel') : tr('job.remove') } });
+      try { setIcon(btn, 'x'); } catch (e) { btn.setText('×'); }
+      btn.addEventListener('click', () => dl.remove(job.id));
+      const meta = row.createDiv({ cls: 'jxvd-job-meta' });
+      let text = tr('job.' + job.state);
+      if (job.state === 'running') {
+        text = job.pct.toFixed(0) + ' %' + (job.detail ? ' · ' + job.detail : '');
+        if (job.item && job.item.count > 1) text += ' · ' + tr('job.item', job.item.index, job.item.count);
+      }
+      if (job.state === 'failed' && job.error) text += ' — ' + job.error;
+      if (job.state === 'done' && job.file) text += ' — ' + baseName(job.file);
+      meta.setText(text);
+      if (job.state === 'running') {
+        const bar = row.createDiv({ cls: 'jxvd-bar' });
+        bar.createDiv({ cls: 'jxvd-bar-fill' }).style.width = job.pct + '%';
+      }
+    }
+    const done = dl.jobs.some((j) => j.state !== 'queued' && j.state !== 'running');
+    if (done) {
+      const clear = el.createEl('button', { text: tr('view.clear') });
+      clear.addEventListener('click', () => dl.clearFinished());
+    }
+  }
 }
 
 /* ================================================================== */
@@ -526,7 +927,7 @@ class VideoDownloaderSettingTab extends PluginSettingTab {
       return s;
     };
     const bascule = (cle, nom, desc) => ligne(nom, desc).addToggle((c) => c
-      .setValue(SETTINGS[cle] !== false)
+      .setValue(!!SETTINGS[cle])
       .onChange(async (v) => { SETTINGS[cle] = v; await enregistrer(); }));
     const texte = (cle, nom, desc, large) => ligne(nom, desc).addText((t) => {
       t.setValue(SETTINGS[cle] || '').onChange(async (v) => { SETTINGS[cle] = v.trim(); await enregistrer(); });
@@ -539,6 +940,9 @@ class VideoDownloaderSettingTab extends PluginSettingTab {
       .setValue(SETTINGS.language)
       .onChange(async (v) => { SETTINGS.language = v; await enregistrer(); this.display(); }));
     bascule('menuOnAllLinks', tr('set.menuOnAllLinks'), tr('set.menuOnAllLinksDesc'));
+    ligne(tr('set.showRibbon'), tr('set.showRibbonDesc')).addToggle((c) => c
+      .setValue(SETTINGS.showRibbon !== false)
+      .onChange(async (v) => { SETTINGS.showRibbon = v; await enregistrer(); this.plugin.updateRibbon(); }));
 
     titre(tr('set.defaults'), tr('set.defaultsDesc'));
     ligne(tr('set.quality')).addDropdown((d) => d
@@ -558,8 +962,16 @@ class VideoDownloaderSettingTab extends PluginSettingTab {
       const d = SETTINGS.destinations[i] || (SETTINGS.destinations[i] = { name: '', path: '' });
       ligne(i === 0 ? tr('set.destDefault') : tr('set.destN', i + 1))
         .addText((t) => { t.setPlaceholder(tr('set.destName')).setValue(d.name || '').onChange(async (v) => { d.name = v; await enregistrer(); }); })
-        .addText((t) => { t.setPlaceholder(tr('set.destPath')).setValue(d.path || '').onChange(async (v) => { d.path = v; await enregistrer(); }); t.inputEl.addClass('jxvd-wide'); });
+        .addText((t) => { t.setPlaceholder(tr('set.destPath')).setValue(d.path || '').onChange(async (v) => { d.path = v; await enregistrer(); }); t.inputEl.addClass('jxvd-wide'); attachFolderSuggest(this.app, t.inputEl); });
     }
+
+    titre(tr('set.series'));
+    ligne(tr('set.seriesBase'), tr('set.seriesBaseDesc')).addText((t) => {
+      t.setValue(SETTINGS.seriesBase || '').onChange(async (v) => { SETTINGS.seriesBase = v.trim(); await enregistrer(); });
+      t.inputEl.addClass('jxvd-wide');
+      attachFolderSuggest(this.app, t.inputEl);
+    });
+    bascule('seriesTitle', tr('set.seriesTitle'), tr('set.seriesTitleDesc'));
 
     titre(tr('set.tools'), tr('set.toolsDesc'));
     texte('ytdlpPath', tr('set.ytdlp'), '', true);
@@ -596,6 +1008,10 @@ module.exports = class VideoDownloaderPlugin extends Plugin {
       if (url) this.addMenuItems(menu, url);
     }));
 
+    this.registerView(VIEW_TYPE, (leaf) => new DownloadView(leaf, this));
+    this.updateRibbon();
+    this.addCommand({ id: 'open-panel', name: tr('cmd.openView'), callback: () => this.openView() });
+
     this.addCommand({ id: 'cancel-download', name: tr('cmd.cancel'), callback: () => this.downloader.cancel() });
     this.addCommand({ id: 'download-clipboard', name: tr('cmd.downloadClipboard'), callback: () => this.fromClipboard(false) });
     this.addCommand({ id: 'download-clipboard-options', name: tr('cmd.downloadClipboardOptions'), callback: () => this.fromClipboard(true) });
@@ -603,6 +1019,25 @@ module.exports = class VideoDownloaderPlugin extends Plugin {
 
   onunload() {
     if (this.downloader && this.downloader.current) this.downloader.cancel();
+  }
+
+  updateRibbon() {
+    if (SETTINGS.showRibbon && !this.ribbonEl) {
+      this.ribbonEl = this.addRibbonIcon('download', tr('view.title'), () => this.openView());
+    } else if (!SETTINGS.showRibbon && this.ribbonEl) {
+      this.ribbonEl.remove();
+      this.ribbonEl = null;
+    }
+  }
+
+  async openView() {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(VIEW_TYPE)[0];
+    if (!leaf) {
+      leaf = workspace.getRightLeaf(false);
+      await leaf.setViewState({ type: VIEW_TYPE, active: true });
+    }
+    workspace.revealLeaf(leaf);
   }
 
   /* Les deux entrées, une seule fois par menu même si url-menu et editor-menu se déclenchent tous deux. */
