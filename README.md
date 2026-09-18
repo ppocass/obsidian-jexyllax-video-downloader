@@ -11,6 +11,8 @@ three of them for you, in its own folder, from their official release pages.
 > **Status:** written and tested on macOS (Apple Silicon). Linux and Windows
 > builds are wired in but have not been tested yet.
 
+![Right-click on a link in a note: the two download entries](docs/screenshot-menu.png)
+
 ## Use
 
 **Right-click a link** (reading mode, Live Preview or source mode):
@@ -19,6 +21,8 @@ three of them for you, in its own folder, from their official release pages.
 - *Download video with options…* — a small dialog, pre-filled with the
   defaults, where you only change what differs for this download: quality,
   format, subtitles, file name, destination folder. `Enter` validates.
+
+![The options dialog, pre-filled with the defaults](docs/screenshot-options.png)
 
 **Side panel** (ribbon icon ⬇, or the command *Open the download panel*):
 
@@ -29,6 +33,8 @@ three of them for you, in its own folder, from their official release pages.
   `<series folder>/<Name>/`. A playlist link numbers each of its items.
 - The list below the form shows every download with its state and progress.
   A cross removes a queued download or cancels the running one.
+
+![The side panel in Series mode, with finished downloads](docs/screenshot-panel.png)
 
 **Command palette:** open the panel, download the link in the clipboard (with
 or without options), cancel the current download.
@@ -53,6 +59,8 @@ attachment-folder setting.
    menu on every http(s) link or only on the main video sites, ribbon icon.
 5. **Advanced** (hidden by default) — explicit paths for the three tools when
    automatic detection is not what you want, browser cookies.
+
+![The Tools section of the settings](docs/screenshot-settings.png)
 
 ## How it works — for the curious and the cautious
 
