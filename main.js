@@ -605,7 +605,7 @@ const EXE = IS_WIN ? '.exe' : '';
 /* D'où viennent les binaires : pages de publication officielles sur GitHub, choisies selon le système. */
 const TOOLS = {
   ytdlp: {
-    label: 'yt-dlp', repo: 'yt-dlp/yt-dlp', bin: 'yt-dlp' + EXE, versionArgs: ['--version'],
+    label: 'yt-dlp', repo: 'yt-dlp/yt-dlp', bin: 'yt-dlp' + EXE, versionArgs: ['--version'], compareVersion: true,
     asset: { 'darwin-arm64': 'yt-dlp_macos', 'darwin-x64': 'yt-dlp_macos', 'linux-x64': 'yt-dlp_linux', 'linux-arm64': 'yt-dlp_linux_aarch64', 'win32-x64': 'yt-dlp.exe' },
     sums: 'SHA2-256SUMS',
   },
@@ -615,7 +615,7 @@ const TOOLS = {
     sums: null,
   },
   deno: {
-    label: 'deno', repo: 'denoland/deno', bin: 'deno' + EXE, versionArgs: ['--version'], zip: true,
+    label: 'deno', repo: 'denoland/deno', bin: 'deno' + EXE, versionArgs: ['--version'], zip: true, compareVersion: true,
     asset: { 'darwin-arm64': 'deno-aarch64-apple-darwin.zip', 'darwin-x64': 'deno-x86_64-apple-darwin.zip', 'linux-x64': 'deno-x86_64-unknown-linux-gnu.zip', 'linux-arm64': 'deno-aarch64-unknown-linux-gnu.zip', 'win32-x64': 'deno-x86_64-pc-windows-msvc.zip' },
     sums: 'asset.sha256sum',
   },
@@ -737,9 +737,25 @@ class ToolManager {
       const r = await runProcess(path, TOOLS[name].versionArgs, this.env());
       st.version = r.code === 0 ? parseVersion(r.out) : '';
       if (r.code !== 0 && !st.version) st.error = (r.out || '').trim().split('\n')[0];
+      st.inBin = path.startsWith(this.binDir + '/');
+      st.installedRelease = st.inBin ? this.installedRelease(name) : '';
     }
     this.status[name] = st;
     return st;
+  }
+
+  /* La release installée dans bin/, notée à l'installation : le binaire de ffmpeg-static n'annonce pas la même version que sa release. */
+  installedRelease(name) {
+    try { return require('fs').readFileSync(this.binDir + '/' + name + '.release', 'utf8').trim(); } catch (e) { return ''; }
+  }
+
+  /* 'current' (à jour), 'outdated' (une release plus récente existe), '' (impossible à dire). */
+  updateState(name) {
+    const st = this.status[name] || {};
+    if (!st.path || !st.latest) return '';
+    if (st.inBin) return st.installedRelease ? (st.installedRelease === st.latest ? 'current' : 'outdated') : '';
+    if (!TOOLS[name].compareVersion || !st.version) return '';
+    return st.version === st.latest ? 'current' : 'outdated';
   }
 
   async checkAll() { for (const n of Object.keys(TOOLS)) await this.check(n); return this.status; }
@@ -790,6 +806,7 @@ class ToolManager {
         fs.renameSync(tmp, dest);
       }
       if (!IS_WIN) fs.chmodSync(dest, 0o755);
+      fs.writeFileSync(this.binDir + '/' + name + '.release', this.status[name].latest || '', 'utf8');
       // macOS met en quarantaine ce qui vient du réseau : on l'enlève, sinon Gatekeeper bloque le binaire
       if (typeof process !== 'undefined' && process.platform === 'darwin') await runProcess('/usr/bin/xattr', ['-d', 'com.apple.quarantine', dest], this.env());
       await this.check(name);
@@ -1466,18 +1483,18 @@ class VideoDownloaderSettingTab extends PluginSettingTab {
     for (const name of Object.keys(TOOLS)) {
       const st = tm.status[name] || {};
       const row = new Setting(el).setName(tr('tools.' + name));
+      const etat = tm.updateState(name);
       let desc = st.path ? (st.version ? tr('tools.found', st.version) : (st.error || tr('tools.found', '?'))) + ' — ' + st.path : tr('tools.missing');
-      if (st.path && st.latest && st.version) desc += ' · ' + (st.latest === st.version ? tr('tools.upToDate') : tr('tools.newer', st.latest));
+      if (etat === 'current') desc += ' · ' + tr('tools.upToDate');
+      if (etat === 'outdated') desc += ' · ' + tr('tools.newer', st.latest);
       row.setDesc(desc);
       row.descEl.addClass(st.path ? 'jxvd-tool-ok' : 'jxvd-tool-missing');
-      const inBin = st.path && st.path.startsWith(tm.binDir + '/');
-      const label = !st.path ? tr('tools.install') : (st.latest && st.version && st.latest !== st.version ? tr('tools.update') : tr('tools.reinstall'));
+      const label = !st.path ? tr('tools.install') : (etat === 'outdated' ? tr('tools.update') : tr('tools.reinstall'));
       row.addButton((b) => {
         b.setButtonText(label).setDisabled(!!tm.busy[name]);
-        if (!st.path || (st.latest && st.version && st.latest !== st.version)) b.setCta();
+        if (!st.path || etat === 'outdated') b.setCta();
         b.onClick(() => this.installTool(name));
       });
-      if (!inBin && st.path) row.controlEl.setAttr('title', st.path);
     }
     new Setting(el).addButton((b) => b.setButtonText(tr('tools.recheck')).onClick(async () => {
       for (const n of Object.keys(TOOLS)) { try { await tm.latest(n); } catch (e) { /* hors ligne : on garde l'état connu */ } }
