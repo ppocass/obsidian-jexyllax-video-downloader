@@ -21,6 +21,7 @@ function require(n){ if(n!=='obsidian') throw new Error('require hors test : '+n
   FuzzySuggestModal: class{constructor(){}}, Component: class{constructor(){}}, Notice: class{}, Menu: class{},
   PluginSettingTab: class{constructor(){}}, Setting: class{constructor(){}}, setIcon: function(){},
   TFolder: class{}, TFile: class{} }; }
+var process={env:{HOME:"/Users/test"},platform:"darwin",arch:"arm64"};
 var window={devicePixelRatio:1,setTimeout:function(){},clearTimeout:function(){},localStorage:{getItem:function(){return 'fr';}}};
 var document={body:{classList:{contains:function(){return false;}}},createElement:function(){return {};},head:{appendChild:function(){}}};
 var CLES_UTILISEES = """ + json.dumps(cles) + ";\nvar SOURCE_MAIN = " + json.dumps(src) + ";\n" + src.replace('module.exports =', 'var __plugin =')

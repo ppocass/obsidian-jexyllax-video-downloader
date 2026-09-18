@@ -6,7 +6,7 @@ const { Plugin, ItemView, Modal, Notice, PluginSettingTab, Setting, setIcon, req
 /*  Réglages et traductions                                           */
 /* ================================================================== */
 
-const HOME = (typeof process !== 'undefined' && process.env && process.env.HOME) || '/Users/p.pocass';
+const HOME = (typeof process !== 'undefined' && process.env && (process.env.HOME || process.env.USERPROFILE)) || '';
 
 const DEFAULT_SETTINGS = {
   language: 'auto',               // fr | en | auto (suit Obsidian)
@@ -1065,7 +1065,7 @@ function attachFolderSuggest(app, inputEl, onPick) {
   document.body.appendChild(list);
   inputEl.setAttribute('list', list.id);
   inputEl.addEventListener('input', () => {
-    list.innerHTML = '';
+    while (list.firstChild) list.removeChild(list.firstChild);
     for (const v of folderSuggestions(inputEl.value)) {
       const o = document.createElement('option'); o.value = v; list.appendChild(o);
     }
