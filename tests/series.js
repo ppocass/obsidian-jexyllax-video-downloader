@@ -6,7 +6,7 @@ check(pad(3, 2) === '03' && pad(12, 5) === '00012' && pad('x', 2) === '00' && pa
 check(episodeName('Ma série: saison', 1, 7) === 'Ma série- saison S01E00007', 'nom d\'épisode faux : ' + episodeName('Ma série: saison', 1, 7));
 check(episodeName('S', 2, 1, 'Titre') === 'S S02E00001 - Titre', 'nom avec titre faux');
 
-const s = Object.assign({}, DEFAULT_SETTINGS, { seriesBase: '~/Downloads/TV Shows', subsFixPath: '' });
+const s = Object.assign({}, DEFAULT_SETTINGS, { seriesBase: '~/Downloads/TV Shows' });
 const form = { text: 'https://youtu.be/a\n\n pas un lien \nhttps://youtu.be/b.\nhttps://www.youtube.com/playlist?list=PL1', mode: 'series',
   seriesName: 'Cours', season: 1, startEpisode: 4, seriesTitle: true, seriesBase: '', quality: '720', container: 'mkv', subtitles: true };
 const r = jobsFromPanel(form, s);

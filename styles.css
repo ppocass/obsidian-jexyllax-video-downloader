@@ -125,3 +125,8 @@
   height: 100%;
   background: var(--interactive-accent);
 }
+
+/* --- réglages : état des outils --- */
+
+.jxvd-tool-ok { color: var(--text-success); }
+.jxvd-tool-missing { color: var(--text-error); }

@@ -1,6 +1,6 @@
 'use strict';
 
-const { Plugin, ItemView, Modal, Notice, PluginSettingTab, Setting, setIcon } = require('obsidian');
+const { Plugin, ItemView, Modal, Notice, PluginSettingTab, Setting, setIcon, requestUrl } = require('obsidian');
 
 /* ================================================================== */
 /*  Réglages et traductions                                           */
@@ -9,11 +9,12 @@ const { Plugin, ItemView, Modal, Notice, PluginSettingTab, Setting, setIcon } = 
 const HOME = (typeof process !== 'undefined' && process.env && process.env.HOME) || '/Users/p.pocass';
 
 const DEFAULT_SETTINGS = {
-  language: 'fr',                 // fr | en | auto (suit Obsidian)
-  ytdlpPath: '/opt/homebrew/bin/yt-dlp',
-  ffmpegDir: '/opt/homebrew/bin', // dossier contenant ffmpeg et ffprobe
-  subsFixPath: HOME + '/.local/bin/yt-subs-fix.py', // vide = pas de post-traitement
-  cookiesBrowser: 'safari',       // safari | chrome | firefox | none
+  language: 'auto',               // fr | en | auto (suit Obsidian)
+  ytdlpPath: '',                  // vide = détection automatique (dossier bin/ du plugin, puis emplacements habituels)
+  ffmpegPath: '',
+  denoPath: '',
+  cookiesBrowser: 'none',         // none | safari | chrome | firefox
+  showAdvanced: false,
   quality: '1080',                // 720 | 1080 | 1440
   container: 'mkv',               // mkv | mp4 | webm
   subtitles: true,
@@ -82,7 +83,7 @@ const STRINGS = {
     'set.container': 'Format du fichier',
     'set.containerDesc': 'MKV et MP4 intègrent les sous-titres comme piste ; WebM les laisse en fichier .srt à côté.',
     'set.subtitles': 'Sous-titres',
-    'set.subtitlesDesc': 'Récupérer les sous-titres puis les nettoyer et les intégrer.',
+    'set.subtitlesDesc': 'Récupérer les sous-titres, les remettre en blocs de film (YouTube les livre en lignes qui défilent), puis les intégrer au fichier.',
     'set.subLangs': 'Langues des sous-titres',
     'set.subLangsDesc': 'Codes séparés par des virgules, dans l\'ordre de préférence.',
     'set.keepTitle': 'Garder le titre de la vidéo comme nom de fichier',
@@ -93,15 +94,9 @@ const STRINGS = {
     'set.destPath': 'Chemin',
     'set.destN': 'Dossier %s',
     'set.destDefault': 'Dossier par défaut',
-    'set.tools': 'Outils',
-    'set.toolsDesc': 'Le plugin ne télécharge aucun programme : il lance ceux déjà installés sur ce Mac.',
     'set.ytdlp': 'Chemin de yt-dlp',
-    'set.ffmpegDir': 'Dossier de ffmpeg',
-    'set.ffmpegDirDesc': 'Dossier qui contient ffmpeg et ffprobe, nécessaires pour assembler la vidéo et intégrer les sous-titres.',
-    'set.subsFix': 'Script de nettoyage des sous-titres',
-    'set.subsFixDesc': 'Lancé sur le fichier une fois téléchargé (yt-subs-fix.py). Vide : aucun post-traitement.',
     'set.cookies': 'Cookies du navigateur',
-    'set.cookiesDesc': 'Réutilise la session du navigateur pour les vidéos qui demandent d\'être connecté.',
+    'set.cookiesDesc': 'Lit une fois les cookies du navigateur au moment du téléchargement, pour les vidéos qui demandent d\'être connecté. Safari demande l\'accès complet au disque, Chrome l\'accès au trousseau.',
     'cookies.none': 'Aucun',
     'view.title': 'Téléchargements de vidéos',
     'view.urls': 'Liens',
@@ -138,6 +133,38 @@ const STRINGS = {
     'set.seriesBaseDesc': 'Chaque série va dans son propre sous-dossier : « Nom de la série / Nom S01E00001.mkv ».',
     'set.seriesTitle': 'Ajouter le titre de la vidéo au nom des épisodes',
     'set.seriesTitleDesc': '« Nom S01E00001 - Titre.mkv » au lieu de « Nom S01E00001.mkv ». Modifiable à chaque envoi.',
+    'tools.title': 'Outils',
+    'tools.desc': 'Le plugin ne fait que lancer ces trois programmes. Il peut les installer pour vous dans son propre dossier (%s), depuis leurs pages de publication officielles sur GitHub — rien d\'autre n\'est téléchargé.',
+    'tools.ytdlp': 'yt-dlp — télécharge les vidéos',
+    'tools.ffmpeg': 'ffmpeg — assemble la vidéo et intègre les sous-titres',
+    'tools.deno': 'deno — moteur JavaScript dont yt-dlp a besoin pour YouTube',
+    'tools.found': 'version %s',
+    'tools.missing': 'introuvable',
+    'tools.checking': 'vérification…',
+    'tools.install': 'Installer',
+    'tools.update': 'Mettre à jour',
+    'tools.reinstall': 'Réinstaller',
+    'tools.recheck': 'Vérifier à nouveau',
+    'tools.upToDate': 'à jour',
+    'tools.newer': '%s disponible',
+    'tools.downloading': '%s : téléchargement %s',
+    'tools.verifying': '%s : vérification de l\'empreinte…',
+    'tools.installed': '%s %s installé',
+    'tools.installFailed': 'Installation de %s impossible : %s',
+    'tools.badChecksum': 'empreinte SHA-256 différente de celle publiée — fichier rejeté',
+    'tools.unsupported': 'pas de version publiée pour ce système (%s)',
+    'tools.missingNotice': 'Outils manquants : %s. Ouvrir les réglages pour les installer.',
+    'tools.inPlugin': 'dans le dossier du plugin',
+    'set.folders': 'Dossiers',
+    'set.interface': 'Interface',
+    'set.advanced': 'Réglages avancés',
+    'set.advancedDesc': 'Chemins des outils et cookies du navigateur.',
+    'set.showAdvanced': 'Afficher les réglages avancés',
+    'set.pathOverride': 'Vide : détection automatique.',
+    'set.ffmpeg': 'Chemin de ffmpeg',
+    'set.deno': 'Chemin de deno',
+    'subs.clean': 'sous-titres nettoyés',
+    'subs.embedded': 'sous-titres intégrés',
   },
   en: {
     'menu.download': 'Download video',
@@ -187,7 +214,7 @@ const STRINGS = {
     'set.container': 'File format',
     'set.containerDesc': 'MKV and MP4 embed subtitles as a track; WebM leaves them as a separate .srt file.',
     'set.subtitles': 'Subtitles',
-    'set.subtitlesDesc': 'Fetch subtitles, then clean them up and embed them.',
+    'set.subtitlesDesc': 'Fetch subtitles, turn them into film-style blocks (YouTube delivers rolling lines), then embed them in the file.',
     'set.subLangs': 'Subtitle languages',
     'set.subLangsDesc': 'Comma-separated codes, in order of preference.',
     'set.keepTitle': 'Keep the video title as file name',
@@ -198,15 +225,9 @@ const STRINGS = {
     'set.destPath': 'Path',
     'set.destN': 'Folder %s',
     'set.destDefault': 'Default folder',
-    'set.tools': 'Tools',
-    'set.toolsDesc': 'The plugin downloads no program: it runs the ones already installed on this Mac.',
     'set.ytdlp': 'yt-dlp path',
-    'set.ffmpegDir': 'ffmpeg folder',
-    'set.ffmpegDirDesc': 'Folder containing ffmpeg and ffprobe, needed to merge the video and embed subtitles.',
-    'set.subsFix': 'Subtitle clean-up script',
-    'set.subsFixDesc': 'Run on the file once downloaded (yt-subs-fix.py). Empty: no post-processing.',
     'set.cookies': 'Browser cookies',
-    'set.cookiesDesc': 'Reuses the browser session for videos that require being signed in.',
+    'set.cookiesDesc': 'Reads the browser cookies once at download time, for videos that require being signed in. Safari needs Full Disk Access, Chrome asks for keychain access.',
     'cookies.none': 'None',
     'view.title': 'Video downloads',
     'view.urls': 'Links',
@@ -243,6 +264,38 @@ const STRINGS = {
     'set.seriesBaseDesc': 'Each series gets its own sub-folder: "Series name / Name S01E00001.mkv".',
     'set.seriesTitle': 'Append the video title to episode names',
     'set.seriesTitleDesc': '"Name S01E00001 - Title.mkv" instead of "Name S01E00001.mkv". Can be changed on each submission.',
+    'tools.title': 'Tools',
+    'tools.desc': 'The plugin only runs these three programs. It can install them for you in its own folder (%s), from their official release pages on GitHub — nothing else is downloaded.',
+    'tools.ytdlp': 'yt-dlp — downloads the videos',
+    'tools.ffmpeg': 'ffmpeg — merges the video and embeds subtitles',
+    'tools.deno': 'deno — JavaScript runtime yt-dlp needs for YouTube',
+    'tools.found': 'version %s',
+    'tools.missing': 'not found',
+    'tools.checking': 'checking…',
+    'tools.install': 'Install',
+    'tools.update': 'Update',
+    'tools.reinstall': 'Reinstall',
+    'tools.recheck': 'Check again',
+    'tools.upToDate': 'up to date',
+    'tools.newer': '%s available',
+    'tools.downloading': '%s: downloading %s',
+    'tools.verifying': '%s: verifying checksum…',
+    'tools.installed': '%s %s installed',
+    'tools.installFailed': 'Could not install %s: %s',
+    'tools.badChecksum': 'SHA-256 checksum differs from the published one — file rejected',
+    'tools.unsupported': 'no published build for this system (%s)',
+    'tools.missingNotice': 'Missing tools: %s. Open the settings to install them.',
+    'tools.inPlugin': 'in the plugin folder',
+    'set.folders': 'Folders',
+    'set.interface': 'Interface',
+    'set.advanced': 'Advanced settings',
+    'set.advancedDesc': 'Tool paths and browser cookies.',
+    'set.showAdvanced': 'Show advanced settings',
+    'set.pathOverride': 'Empty: automatic detection.',
+    'set.ffmpeg': 'ffmpeg path',
+    'set.deno': 'deno path',
+    'subs.clean': 'subtitles cleaned',
+    'subs.embedded': 'subtitles embedded',
   },
 };
 
@@ -316,18 +369,20 @@ function safeName(name) {
 }
 
 /* Les options d'un téléchargement (déjà résolues) → arguments yt-dlp, sans shell. */
-function buildArgs(job, s) {
+function buildArgs(job, s, tools) {
   s = s || SETTINGS;
-  const args = ['--newline', '--no-colors', '--embed-chapters', '--embed-metadata'];
-  if (s.ffmpegDir) args.push('--ffmpeg-location', s.ffmpegDir);
+  tools = tools || {};
+  // --print implique le mode silencieux : --no-quiet et --no-simulate le rétablissent, la progression reste lisible
+  const args = ['--newline', '--no-colors', '--no-quiet', '--no-simulate', '--print', 'after_move:' + FILE_MARK + '%(filepath)s',
+    '--embed-chapters', '--embed-metadata'];
+  if (tools.ffmpeg) args.push('--ffmpeg-location', tools.ffmpeg);
   if (s.cookiesBrowser && s.cookiesBrowser !== 'none') args.push('--cookies-from-browser', s.cookiesBrowser);
   args.push('-f', formatFilter(job.quality, job.container));
   if (job.container === 'mkv') args.push('--merge-output-format', 'mkv');
   if (job.subtitles) {
     args.push('--write-subs', '--write-auto-subs', '--sub-langs', job.subLangs || s.subLangs || 'fr,en',
       '--sub-format', 'srt', '--convert-subs', 'srt');
-    // --embed-subs est proscrit : c'est le script qui intègre les sous-titres, après nettoyage
-    if (s.subsFixPath) args.push('--exec', 'after_move:' + shellQuote(s.subsFixPath) + ' {}');
+    // pas de --embed-subs : le plugin nettoie les .srt puis les intègre lui-même (voir « Sous-titres »)
   }
   let name;
   if (job.series) {
@@ -352,9 +407,397 @@ function episodeName(series, season, episode, title) {
   return safeName(series) + ' S' + pad(season, 2) + 'E' + pad(episode, 5) + (title ? ' - ' + title : '');
 }
 
-/* Seule chaîne qui passe par un shell : le chemin du script dans --exec (yt-dlp l'exécute via sh). */
-function shellQuote(p) {
-  return "'" + String(p).replace(/'/g, "'\\''") + "'";
+const FILE_MARK = 'JXVD_FILE:';
+
+/* ================================================================== */
+/*  Sous-titres : du « défilement » YouTube aux blocs de film         */
+/*  (port de yt-subs-fix.py — même logique, sans Python)              */
+/* ================================================================== */
+
+const SUB_MAX_DUR = 7.0;   // durée maximale d'un bloc, en secondes
+const SUB_MIN_DUR = 1.2;   // durée minimale d'un bloc
+const LANG_ISO3 = { fr: 'fre', en: 'eng', es: 'spa', de: 'deu', it: 'ita', pt: 'por', nl: 'nld', ja: 'jpn', ko: 'kor', zh: 'zho', ru: 'rus', ar: 'ara' };
+const SUB_CODEC = { '.mkv': 'srt', '.mp4': 'mov_text', '.m4v': 'mov_text' };
+
+function parseTs(t) {
+  const m = String(t).match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+  if (!m) return 0;
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4]) / 1000;
+}
+
+function fmtTs(t) {
+  let ms = Math.round(Math.max(0, t) * 1000);
+  const h = Math.floor(ms / 3600000); ms -= h * 3600000;
+  const mn = Math.floor(ms / 60000); ms -= mn * 60000;
+  const sec = Math.floor(ms / 1000); ms -= sec * 1000;
+  return pad(h, 2) + ':' + pad(mn, 2) + ':' + pad(sec, 2) + ',' + pad(ms, 3);
+}
+
+/* Texte d'un .srt → liste de [début, fin, texte], balises retirées, espaces normalisés. */
+function readSrt(raw) {
+  const text = String(raw).replace(/^﻿/, '').replace(/\r\n/g, '\n');
+  const cues = [];
+  for (const block of text.trim().split(/\n\s*\n/)) {
+    const lines = block.split('\n').filter((l) => l.trim());
+    if (lines.length < 2) continue;
+    let i = /^\d+$/.test(lines[0].trim()) ? 1 : 0;
+    if (i >= lines.length) continue;
+    const m = lines[i].match(/(\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+)/);
+    if (!m) continue;
+    let t = lines.slice(i + 1).map((l) => l.trim()).join(' ').trim();
+    t = t.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    if (t) cues.push([parseTs(m[1]), parseTs(m[2]), t]);
+  }
+  return cues;
+}
+
+/* Supprime les répétitions consécutives identiques (artefact YouTube). */
+function dedupCues(cues) {
+  const out = [];
+  for (const c of cues) {
+    if (out.length && out[out.length - 1][2] === c[2]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], c[1]);
+    else out.push(c.slice());
+  }
+  return out;
+}
+
+/* Apparie les lignes deux par deux, sans chevauchement, en respectant les silences. */
+function buildBlocks(cues) {
+  const out = [];
+  const n = cues.length;
+  let i = 0;
+  while (i < n) {
+    const a = cues[i];
+    let b = i + 1 < n ? cues[i + 1] : null;
+    if (b && b[0] - a[0] > SUB_MAX_DUR) b = null;   // silence : on ne colle pas les deux lignes
+    const lines = [a[2]].concat(b ? [b[2]] : []);
+    const start = a[0];
+    const nxt = i + (b ? 2 : 1);
+    const hardEnd = nxt < n ? cues[nxt][0] : (b ? b[1] : a[1]);
+    let end = Math.min(hardEnd, start + SUB_MAX_DUR);
+    end = Math.max(end, start + SUB_MIN_DUR);
+    if (nxt < n) end = Math.min(end, cues[nxt][0]);   // jamais de chevauchement
+    if (end > start) out.push([start, end, lines]);
+    i = nxt;
+  }
+  return out;
+}
+
+/* Vrai si le fichier est déjà en blocs non chevauchants : on n'y touche pas. */
+function alreadyClean(cues) {
+  if (cues.length < 3) return true;
+  let overlaps = 0;
+  for (let k = 0; k < cues.length - 1; k++) if (cues[k][1] > cues[k + 1][0] + 1e-6) overlaps++;
+  return overlaps < cues.length * 0.2;
+}
+
+function writeSrt(blocks) {
+  return blocks.map((b, k) => (k + 1) + '\n' + fmtTs(b[0]) + ' --> ' + fmtTs(b[1]) + '\n' + b[2].join('\n') + '\n').join('\n') + '\n';
+}
+
+/* Nettoie un .srt sur place ; renvoie true s'il a été réécrit. */
+function fixSrtFile(path, fs) {
+  fs = fs || require('fs');
+  let cues;
+  try { cues = readSrt(fs.readFileSync(path, 'utf8')); } catch (e) { return false; }
+  if (cues.length < 3 || alreadyClean(cues)) return false;
+  const blocks = buildBlocks(dedupCues(cues));
+  if (!blocks.length) return false;
+  fs.writeFileSync(path + '.tmp', writeSrt(blocks), 'utf8');
+  fs.renameSync(path + '.tmp', path);
+  return true;
+}
+
+function splitPath(p) {
+  const slash = p.lastIndexOf('/');
+  const dir = slash >= 0 ? (p.slice(0, slash) || '/') : '.';
+  const name = p.slice(slash + 1);
+  const dot = name.lastIndexOf('.');
+  return { dir, name, stem: dot > 0 ? name.slice(0, dot) : name, ext: dot > 0 ? name.slice(dot).toLowerCase() : '' };
+}
+
+/* Les .srt posés à côté de la vidéo : « Vidéo.srt », « Vidéo.en.srt », « Vidéo.fr-orig.srt ». */
+function findSidecars(video, fs) {
+  fs = fs || require('fs');
+  const { dir, stem } = splitPath(video);
+  let entries;
+  try { entries = fs.readdirSync(dir); } catch (e) { return []; }
+  return entries.filter((n) => {
+    if (!n.toLowerCase().endsWith('.srt')) return false;
+    const base = n.slice(0, -4);
+    return base === stem || (base.startsWith(stem + '.') && !base.slice(stem.length + 1).includes('.'));
+  }).sort().map((n) => (dir === '/' ? '' : dir) + '/' + n);
+}
+
+function langOf(srt, video) {
+  const stem = splitPath(video).stem;
+  const base = splitPath(srt).name.slice(0, -4);
+  const tag = base.startsWith(stem + '.') ? base.slice(stem.length + 1) : '';
+  const short = tag.split('-')[0].toLowerCase();
+  return { iso: LANG_ISO3[short] || (short || 'und'), tag: tag || 'und' };
+}
+
+/* Arguments ffmpeg pour intégrer les .srt comme pistes du conteneur (copie des flux, pas de réencodage). */
+function embedArgs(video, srts, tmp) {
+  const codec = SUB_CODEC[splitPath(video).ext];
+  if (!codec) return null;
+  const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', video];
+  for (const s of srts) args.push('-i', s);
+  args.push('-map', '0:v?', '-map', '0:a?');
+  for (let i = 1; i <= srts.length; i++) args.push('-map', String(i));
+  args.push('-c', 'copy', '-c:s', codec);
+  srts.forEach((s, i) => {
+    const l = langOf(s, video);
+    args.push('-metadata:s:s:' + i, 'language=' + l.iso, '-metadata:s:s:' + i, 'title=' + l.tag);
+  });
+  args.push(tmp);
+  return args;
+}
+
+function runProcess(cmd, args, env) {
+  return new Promise((resolve) => {
+    let child;
+    try { child = require('child_process').spawn(cmd, args, { env, windowsHide: true }); }
+    catch (e) { resolve({ code: -1, out: e.message }); return; }
+    let out = '';
+    child.stdout.on('data', (d) => { out += d.toString(); });
+    child.stderr.on('data', (d) => { out += d.toString(); });
+    child.on('error', (e) => resolve({ code: -1, out: e.message }));
+    child.on('close', (code) => resolve({ code, out }));
+  });
+}
+
+/* Après un téléchargement : nettoie les .srt voisins, les intègre (MKV/MP4) puis les supprime ; WebM les garde à côté. */
+async function postProcessSubtitles(video, ffmpegPath, env) {
+  const fs = require('fs');
+  const result = { cleaned: 0, embedded: false, srts: [] };
+  if (!fs.existsSync(video)) return result;
+  const srts = findSidecars(video, fs);
+  result.srts = srts;
+  if (!srts.length) return result;
+  for (const srt of srts) if (fixSrtFile(srt, fs)) result.cleaned++;
+  if (!ffmpegPath) return result;
+  const { dir, ext } = splitPath(video);
+  const tmp = (dir === '/' ? '' : dir) + '/.jxvd-' + Date.now() + ext;
+  const args = embedArgs(video, srts, tmp);
+  if (!args) return result;
+  const r = await runProcess(ffmpegPath, args, env);
+  let ok = false;
+  try { ok = r.code === 0 && fs.statSync(tmp).size > 0; } catch (e) { ok = false; }
+  if (ok) {
+    fs.renameSync(tmp, video);
+    for (const srt of srts) { try { fs.unlinkSync(srt); } catch (e) { /* on garde le .srt, tant pis */ } }
+    result.embedded = true;
+  } else {
+    try { fs.unlinkSync(tmp); } catch (e) { /* déjà absent */ }
+    result.error = (r.out || '').trim().split('\n').pop();
+  }
+  return result;
+}
+
+/* ================================================================== */
+/*  Outils : détection, installation, mise à jour                     */
+/* ================================================================== */
+
+const IS_WIN = typeof process !== 'undefined' && process.platform === 'win32';
+const EXE = IS_WIN ? '.exe' : '';
+
+/* D'où viennent les binaires : pages de publication officielles sur GitHub, choisies selon le système. */
+const TOOLS = {
+  ytdlp: {
+    label: 'yt-dlp', repo: 'yt-dlp/yt-dlp', bin: 'yt-dlp' + EXE, versionArgs: ['--version'],
+    asset: { 'darwin-arm64': 'yt-dlp_macos', 'darwin-x64': 'yt-dlp_macos', 'linux-x64': 'yt-dlp_linux', 'linux-arm64': 'yt-dlp_linux_aarch64', 'win32-x64': 'yt-dlp.exe' },
+    sums: 'SHA2-256SUMS',
+  },
+  ffmpeg: {
+    label: 'ffmpeg', repo: 'eugeneware/ffmpeg-static', bin: 'ffmpeg' + EXE, versionArgs: ['-version'],
+    asset: { 'darwin-arm64': 'ffmpeg-darwin-arm64', 'darwin-x64': 'ffmpeg-darwin-x64', 'linux-x64': 'ffmpeg-linux-x64', 'linux-arm64': 'ffmpeg-linux-arm64', 'win32-x64': 'ffmpeg-win32-x64.exe' },
+    sums: null,
+  },
+  deno: {
+    label: 'deno', repo: 'denoland/deno', bin: 'deno' + EXE, versionArgs: ['--version'], zip: true,
+    asset: { 'darwin-arm64': 'deno-aarch64-apple-darwin.zip', 'darwin-x64': 'deno-x86_64-apple-darwin.zip', 'linux-x64': 'deno-x86_64-unknown-linux-gnu.zip', 'linux-arm64': 'deno-aarch64-unknown-linux-gnu.zip', 'win32-x64': 'deno-x86_64-pc-windows-msvc.zip' },
+    sums: 'asset.sha256sum',
+  },
+};
+
+function platformKey() {
+  if (typeof process === 'undefined') return 'darwin-arm64';
+  return process.platform + '-' + process.arch;
+}
+
+/* Le numéro de version dans la sortie de « --version » : première ligne, premier motif x.y.z. */
+function parseVersion(out) {
+  const m = String(out || '').split('\n')[0].match(/\d+\.\d+(\.\d+)?/);
+  return m ? m[0] : '';
+}
+
+/* Les dossiers où chercher un outil que l'utilisateur n'a pas désigné, dans l'ordre. */
+function candidatePaths(name, binDir) {
+  const t = TOOLS[name];
+  const out = [];
+  if (binDir) out.push(binDir + '/' + t.bin);
+  if (IS_WIN) {
+    const env = (typeof process !== 'undefined' && process.env) || {};
+    for (const d of String(env.PATH || '').split(';')) if (d) out.push(d + '\\' + t.bin);
+  } else {
+    for (const d of ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', HOME + '/.local/bin', HOME + '/.deno/bin', HOME + '/bin']) out.push(d + '/' + t.bin);
+    const env = (typeof process !== 'undefined' && process.env) || {};
+    for (const d of String(env.PATH || '').split(':')) if (d) out.push(d + '/' + t.bin);
+  }
+  return out;
+}
+
+/* Le chemin retenu pour un outil : réglage explicite, sinon premier candidat existant. */
+function resolveTool(name, s, binDir, fs) {
+  fs = fs || require('fs');
+  s = s || SETTINGS;
+  const explicit = { ytdlp: s.ytdlpPath, ffmpeg: s.ffmpegPath, deno: s.denoPath }[name];
+  if (explicit && explicit.trim()) {
+    const p = expandHome(explicit.trim());
+    return fs.existsSync(p) ? p : null;
+  }
+  for (const p of candidatePaths(name, binDir)) { try { if (fs.existsSync(p)) return p; } catch (e) { /* suivant */ } }
+  return null;
+}
+
+/* Télécharge une URL dans un fichier en suivant les redirections, avec la progression. */
+function downloadFile(url, dest, onProgress, hops) {
+  hops = hops || 0;
+  return new Promise((resolve, reject) => {
+    if (hops > 8) { reject(new Error('too many redirects')); return; }
+    const https = require('https');
+    const fs = require('fs');
+    const req = https.get(url, { headers: { 'User-Agent': 'obsidian-jexyllax-video-downloader' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        resolve(downloadFile(new URL(res.headers.location, url).toString(), dest, onProgress, hops + 1));
+        return;
+      }
+      if (res.statusCode !== 200) { res.resume(); reject(new Error('HTTP ' + res.statusCode)); return; }
+      const total = Number(res.headers['content-length'] || 0);
+      let got = 0;
+      const file = fs.createWriteStream(dest);
+      res.on('data', (chunk) => { got += chunk.length; if (onProgress) onProgress(got, total); });
+      res.pipe(file);
+      file.on('finish', () => file.close(() => resolve(dest)));
+      file.on('error', reject);
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+  });
+}
+
+function sha256File(path) {
+  const crypto = require('crypto');
+  const fs = require('fs');
+  return crypto.createHash('sha256').update(fs.readFileSync(path)).digest('hex');
+}
+
+/* L'empreinte attendue d'un fichier dans un « SHA2-256SUMS » (« hash  nom » par ligne) ou un « .sha256sum ». */
+function expectedSum(text, assetName) {
+  for (const line of String(text || '').split('\n')) {
+    const m = line.trim().match(/^([0-9a-f]{64})\s+\*?(.+)$/i);
+    if (m && (m[2].trim() === assetName || m[2].trim().endsWith('/' + assetName))) return m[1].toLowerCase();
+  }
+  const single = String(text || '').trim().match(/^([0-9a-f]{64})$/i);
+  return single ? single[1].toLowerCase() : null;
+}
+
+class ToolManager {
+  constructor(plugin) {
+    this.plugin = plugin;
+    this.status = {};     // name → { path, version, latest }
+    this.busy = {};
+  }
+
+  get binDir() { return this.plugin.pluginDir + '/bin'; }
+
+  path(name) { return resolveTool(name, SETTINGS, this.binDir); }
+
+  /* Chemins de tous les outils, pour la commande de téléchargement. */
+  paths() { return { ytdlp: this.path('ytdlp'), ffmpeg: this.path('ffmpeg'), deno: this.path('deno') }; }
+
+  missing() { return Object.keys(TOOLS).filter((n) => !this.path(n)); }
+
+  /* L'environnement des processus lancés : bin/ du plugin et les dossiers habituels devant le PATH. */
+  env() {
+    const env = Object.assign({}, process.env);
+    const extra = [this.binDir];
+    for (const n of Object.keys(TOOLS)) { const p = this.path(n); if (p) extra.push(splitPath(p).dir); }
+    if (!IS_WIN) extra.push('/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin');
+    env.PATH = extra.concat([env.PATH || '']).filter(Boolean).join(IS_WIN ? ';' : ':');
+    return env;
+  }
+
+  async check(name) {
+    const path = this.path(name);
+    const st = { path, version: '', latest: this.status[name] ? this.status[name].latest : '' };
+    if (path) {
+      const r = await runProcess(path, TOOLS[name].versionArgs, this.env());
+      st.version = r.code === 0 ? parseVersion(r.out) : '';
+      if (r.code !== 0 && !st.version) st.error = (r.out || '').trim().split('\n')[0];
+    }
+    this.status[name] = st;
+    return st;
+  }
+
+  async checkAll() { for (const n of Object.keys(TOOLS)) await this.check(n); return this.status; }
+
+  async latest(name) {
+    const r = await requestUrl({ url: 'https://api.github.com/repos/' + TOOLS[name].repo + '/releases/latest', headers: { 'User-Agent': 'obsidian-jexyllax-video-downloader' } });
+    const tag = String(r.json.tag_name || '');
+    const st = this.status[name] || (this.status[name] = {});
+    st.latest = tag.replace(/^v/, '').replace(/^b/, '');
+    st.assets = r.json.assets || [];
+    return st.latest;
+  }
+
+  /* Installe (ou remplace) un outil dans bin/ depuis sa dernière publication, empreinte vérifiée quand elle est publiée. */
+  async install(name, onProgress) {
+    const t = TOOLS[name];
+    const key = platformKey();
+    const assetName = t.asset[key];
+    if (!assetName) throw new Error(tr('tools.unsupported', key));
+    if (this.busy[name]) return;
+    this.busy[name] = true;
+    const fs = require('fs');
+    try {
+      await this.latest(name);
+      const assets = this.status[name].assets || [];
+      const asset = assets.find((a) => a.name === assetName);
+      if (!asset) throw new Error(assetName + ' ' + tr('tools.missing'));
+      fs.mkdirSync(this.binDir, { recursive: true });
+      const tmp = this.binDir + '/.' + assetName + '.part';
+      await downloadFile(asset.browser_download_url, tmp, (got, total) => onProgress && onProgress(got, total));
+
+      // empreinte : fichier de sommes de la release, ou <asset>.sha256sum à côté
+      const sumsName = t.sums === 'asset.sha256sum' ? assetName + '.sha256sum' : t.sums;
+      const sumsAsset = sumsName ? assets.find((a) => a.name === sumsName) : null;
+      if (sumsAsset) {
+        onProgress && onProgress(-1, 0);
+        const txt = (await requestUrl({ url: sumsAsset.browser_download_url })).text;
+        const expected = expectedSum(txt, assetName);
+        if (expected && sha256File(tmp) !== expected) { fs.unlinkSync(tmp); throw new Error(tr('tools.badChecksum')); }
+      }
+
+      const dest = this.binDir + '/' + t.bin;
+      if (t.zip) {
+        const r = await runProcess(IS_WIN ? 'tar' : '/usr/bin/tar', ['-xf', tmp, '-C', this.binDir], this.env());
+        fs.unlinkSync(tmp);
+        if (r.code !== 0) throw new Error(r.out.trim().split('\n').pop() || 'unzip');
+      } else {
+        fs.renameSync(tmp, dest);
+      }
+      if (!IS_WIN) fs.chmodSync(dest, 0o755);
+      // macOS met en quarantaine ce qui vient du réseau : on l'enlève, sinon Gatekeeper bloque le binaire
+      if (typeof process !== 'undefined' && process.platform === 'darwin') await runProcess('/usr/bin/xattr', ['-d', 'com.apple.quarantine', dest], this.env());
+      await this.check(name);
+      return this.status[name];
+    } finally {
+      this.busy[name] = false;
+    }
+  }
 }
 
 /* ================================================================== */
@@ -368,6 +811,7 @@ function parseLine(line) {
   if ((m = l.match(/^\[download\]\s+([\d.]+)%\s+of\s+~?\s*([\d.]+\s*\w+)(?:\s+at\s+([\d.]+\s*\w+\/s|Unknown\s+\S+))?(?:\s+ETA\s+(\S+))?/))) {
     return { phase: 'download', pct: parseFloat(m[1]), size: m[2], speed: m[3] || '', eta: m[4] || '' };
   }
+  if (l.startsWith(FILE_MARK)) return { phase: 'file', file: l.slice(FILE_MARK.length) };
   if ((m = l.match(/^\[download\]\s+Destination:\s+(.+)$/))) return { phase: 'download', file: m[1] };
   if ((m = l.match(/^\[Merger\]\s+Merging formats into\s+"(.+)"$/))) return { phase: 'merge', file: m[1] };
   if (/^\[Exec\]/.test(l) || (/^\[(EmbedSubtitle|SubtitlesConvertor|FFmpegSubtitlesConvertor|info)\]/.test(l) && /subtitle/i.test(l))) return { phase: 'subs' };
@@ -441,26 +885,28 @@ class Downloader {
     catch (e) { job.state = 'failed'; job.error = 'child_process'; new Notice(tr('notice.failed', 'child_process')); this.current = null; this.notify(); return; }
 
     const fs = require('fs');
-    if (!fs.existsSync(SETTINGS.ytdlpPath)) {
-      new Notice(tr('notice.noBinary', SETTINGS.ytdlpPath), 8000);
-      job.state = 'failed'; job.error = tr('notice.noBinary', SETTINGS.ytdlpPath);
+    const tools = this.plugin.tools.paths();
+    if (!tools.ytdlp) {
+      const msg = tr('tools.missingNotice', this.plugin.tools.missing().map((n) => TOOLS[n].label).join(', '));
+      new Notice(msg, 8000);
+      job.state = 'failed'; job.error = msg;
       this.current = null; this.plugin.setStatus(''); this.notify(); return;
     }
     try { fs.mkdirSync(job.destination, { recursive: true }); } catch (e) { /* yt-dlp le dira */ }
 
-    const args = buildArgs(job, SETTINGS);
-    const env = Object.assign({}, process.env);
-    env.PATH = [SETTINGS.ffmpegDir, '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', env.PATH || ''].filter(Boolean).join(':');
+    const args = buildArgs(job, SETTINGS, tools);
+    const env = this.plugin.tools.env();
 
     job.state = 'running';
     job.child = null;
+    job.files = [];
     this.current = job;
     this.plugin.setStatus(tr('status.starting'));
     new Notice(tr('notice.started', jobLabel(job)));
     this.notify();
 
     let child;
-    try { child = spawn(SETTINGS.ytdlpPath, args, { env, cwd: job.destination, windowsHide: true }); }
+    try { child = spawn(tools.ytdlp, args, { env, cwd: job.destination, windowsHide: true }); }
     catch (e) { job.state = 'failed'; job.error = e.message; new Notice(tr('notice.failed', e.message)); this.next(); return; }
     job.child = child;
 
@@ -474,11 +920,23 @@ class Downloader {
     child.stdout.on('data', onData);
     child.stderr.on('data', onData);
     child.on('error', (e) => { job.error = e.message; });
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
       if (buf) this.onLine(buf);
       job.child = null;
       if (job.cancelled) { job.state = 'cancelled'; new Notice(tr('notice.cancelled')); }
-      else if (code === 0) { job.state = 'done'; job.pct = 100; new Notice(tr('notice.done', baseName(job.file || job.url)), 8000); }
+      else if (code === 0) {
+        // sous-titres : nettoyage puis intégration, fichier par fichier (une playlist en produit plusieurs)
+        if (job.subtitles && job.files.length) {
+          job.detail = tr('status.subs');
+          this.plugin.setStatus(tr('status.subs') + this.suffix());
+          this.notify();
+          for (const f of job.files) {
+            try { await postProcessSubtitles(f, tools.ffmpeg, env); } catch (e) { /* la vidéo est là, les .srt restent à côté */ }
+          }
+        }
+        job.state = 'done'; job.pct = 100; job.detail = '';
+        new Notice(tr('notice.done', baseName(job.file || job.url)), 8000);
+      }
       else { job.state = 'failed'; new Notice(tr('notice.failed', job.error || ('code ' + code)), 10000); }
       // une playlist en mode Série a consommé plusieurs numéros : on décale les épisodes qui suivent
       if (job.series && job.item && job.item.count > 1) {
@@ -493,6 +951,7 @@ class Downloader {
     const p = parseLine(line);
     const job = this.current;
     if (!p || !job) return;
+    if (p.phase === 'file') { job.file = p.file; job.files.push(p.file); this.notify(); return; }
     if (p.file) job.file = p.file;
     if (p.phase === 'error') job.error = p.message;
     if (p.phase === 'item') { job.item = { index: p.index, count: p.count }; }
@@ -920,30 +1379,28 @@ class VideoDownloaderSettingTab extends PluginSettingTab {
     const titre = (nom, desc) => {
       const s = new Setting(containerEl).setName(nom).setHeading();
       if (desc) s.setDesc(desc);
+      return s;
     };
-    const ligne = (nom, desc) => {
-      const s = new Setting(containerEl).setName(nom);
+    const ligne = (nom, desc, parent) => {
+      const s = new Setting(parent || containerEl).setName(nom);
       if (desc) s.setDesc(desc);
       return s;
     };
-    const bascule = (cle, nom, desc) => ligne(nom, desc).addToggle((c) => c
+    const bascule = (cle, nom, desc, apres) => ligne(nom, desc).addToggle((c) => c
       .setValue(!!SETTINGS[cle])
-      .onChange(async (v) => { SETTINGS[cle] = v; await enregistrer(); }));
-    const texte = (cle, nom, desc, large) => ligne(nom, desc).addText((t) => {
+      .onChange(async (v) => { SETTINGS[cle] = v; await enregistrer(); if (apres) apres(); }));
+    const chemin = (cle, nom, desc) => ligne(nom, desc).addText((t) => {
       t.setValue(SETTINGS[cle] || '').onChange(async (v) => { SETTINGS[cle] = v.trim(); await enregistrer(); });
-      if (large) t.inputEl.addClass('jxvd-wide');
+      t.inputEl.addClass('jxvd-wide');
+      attachFolderSuggest(this.app, t.inputEl);
     });
 
-    titre(tr('set.general'));
-    ligne(tr('set.language'), tr('set.languageDesc')).addDropdown((d) => d
-      .addOptions({ fr: 'Français', en: 'English', auto: tr('set.langAuto') })
-      .setValue(SETTINGS.language)
-      .onChange(async (v) => { SETTINGS.language = v; await enregistrer(); this.display(); }));
-    bascule('menuOnAllLinks', tr('set.menuOnAllLinks'), tr('set.menuOnAllLinksDesc'));
-    ligne(tr('set.showRibbon'), tr('set.showRibbonDesc')).addToggle((c) => c
-      .setValue(SETTINGS.showRibbon !== false)
-      .onChange(async (v) => { SETTINGS.showRibbon = v; await enregistrer(); this.plugin.updateRibbon(); }));
+    /* --- Outils : ce que l'utilisateur doit voir en premier --- */
+    titre(tr('tools.title'), tr('tools.desc', tr('tools.inPlugin')));
+    this.toolsEl = containerEl.createDiv();
+    this.renderTools();
 
+    /* --- Réglages par défaut --- */
     titre(tr('set.defaults'), tr('set.defaultsDesc'));
     ligne(tr('set.quality')).addDropdown((d) => d
       .addOptions({ '720': '720p', '1080': '1080p', '1440': '1440p' })
@@ -953,34 +1410,92 @@ class VideoDownloaderSettingTab extends PluginSettingTab {
       .addOptions({ mkv: tr('container.mkv'), mp4: tr('container.mp4'), webm: tr('container.webm') })
       .setValue(SETTINGS.container)
       .onChange(async (v) => { SETTINGS.container = v; await enregistrer(); }));
-    bascule('subtitles', tr('set.subtitles'), tr('set.subtitlesDesc'));
-    texte('subLangs', tr('set.subLangs'), tr('set.subLangsDesc'));
+    bascule('subtitles', tr('set.subtitles'), tr('set.subtitlesDesc'), () => this.display());
+    if (SETTINGS.subtitles) {
+      ligne(tr('set.subLangs'), tr('set.subLangsDesc')).addText((t) => t
+        .setValue(SETTINGS.subLangs || '').onChange(async (v) => { SETTINGS.subLangs = v.trim(); await enregistrer(); }));
+    }
     bascule('keepTitle', tr('set.keepTitle'), tr('set.keepTitleDesc'));
 
-    titre(tr('set.destinations'), tr('set.destinationsDesc'));
+    /* --- Dossiers --- */
+    titre(tr('set.folders'), tr('set.destinationsDesc'));
     for (let i = 0; i < 3; i++) {
       const d = SETTINGS.destinations[i] || (SETTINGS.destinations[i] = { name: '', path: '' });
       ligne(i === 0 ? tr('set.destDefault') : tr('set.destN', i + 1))
         .addText((t) => { t.setPlaceholder(tr('set.destName')).setValue(d.name || '').onChange(async (v) => { d.name = v; await enregistrer(); }); })
         .addText((t) => { t.setPlaceholder(tr('set.destPath')).setValue(d.path || '').onChange(async (v) => { d.path = v; await enregistrer(); }); t.inputEl.addClass('jxvd-wide'); attachFolderSuggest(this.app, t.inputEl); });
     }
-
-    titre(tr('set.series'));
-    ligne(tr('set.seriesBase'), tr('set.seriesBaseDesc')).addText((t) => {
-      t.setValue(SETTINGS.seriesBase || '').onChange(async (v) => { SETTINGS.seriesBase = v.trim(); await enregistrer(); });
-      t.inputEl.addClass('jxvd-wide');
-      attachFolderSuggest(this.app, t.inputEl);
-    });
+    chemin('seriesBase', tr('set.seriesBase'), tr('set.seriesBaseDesc'));
     bascule('seriesTitle', tr('set.seriesTitle'), tr('set.seriesTitleDesc'));
 
-    titre(tr('set.tools'), tr('set.toolsDesc'));
-    texte('ytdlpPath', tr('set.ytdlp'), '', true);
-    texte('ffmpegDir', tr('set.ffmpegDir'), tr('set.ffmpegDirDesc'), true);
-    texte('subsFixPath', tr('set.subsFix'), tr('set.subsFixDesc'), true);
-    ligne(tr('set.cookies'), tr('set.cookiesDesc')).addDropdown((d) => d
-      .addOptions({ safari: 'Safari', chrome: 'Chrome', firefox: 'Firefox', none: tr('cookies.none') })
-      .setValue(SETTINGS.cookiesBrowser)
-      .onChange(async (v) => { SETTINGS.cookiesBrowser = v; await enregistrer(); }));
+    /* --- Interface --- */
+    titre(tr('set.interface'));
+    ligne(tr('set.language'), tr('set.languageDesc')).addDropdown((d) => d
+      .addOptions({ auto: tr('set.langAuto'), fr: 'Français', en: 'English' })
+      .setValue(SETTINGS.language)
+      .onChange(async (v) => { SETTINGS.language = v; await enregistrer(); this.display(); }));
+    bascule('menuOnAllLinks', tr('set.menuOnAllLinks'), tr('set.menuOnAllLinksDesc'));
+    bascule('showRibbon', tr('set.showRibbon'), tr('set.showRibbonDesc'), () => this.plugin.updateRibbon());
+
+    /* --- Avancé : replié par défaut --- */
+    titre(tr('set.advanced'), tr('set.advancedDesc'));
+    bascule('showAdvanced', tr('set.showAdvanced'), '', () => this.display());
+    if (SETTINGS.showAdvanced) {
+      chemin('ytdlpPath', tr('set.ytdlp'), tr('set.pathOverride'));
+      chemin('ffmpegPath', tr('set.ffmpeg'), tr('set.pathOverride'));
+      chemin('denoPath', tr('set.deno'), tr('set.pathOverride'));
+      ligne(tr('set.cookies'), tr('set.cookiesDesc')).addDropdown((d) => d
+        .addOptions({ none: tr('cookies.none'), safari: 'Safari', chrome: 'Chrome', firefox: 'Firefox' })
+        .setValue(SETTINGS.cookiesBrowser)
+        .onChange(async (v) => { SETTINGS.cookiesBrowser = v; await enregistrer(); }));
+    }
+  }
+
+  /* Une ligne par outil : état, puis Installer / Mettre à jour / Réinstaller. */
+  renderTools() {
+    const el = this.toolsEl;
+    if (!el) return;
+    el.empty();
+    const tm = this.plugin.tools;
+    for (const name of Object.keys(TOOLS)) {
+      const st = tm.status[name] || {};
+      const row = new Setting(el).setName(tr('tools.' + name));
+      let desc = st.path ? (st.version ? tr('tools.found', st.version) : (st.error || tr('tools.found', '?'))) + ' — ' + st.path : tr('tools.missing');
+      if (st.path && st.latest && st.version) desc += ' · ' + (st.latest === st.version ? tr('tools.upToDate') : tr('tools.newer', st.latest));
+      row.setDesc(desc);
+      row.descEl.addClass(st.path ? 'jxvd-tool-ok' : 'jxvd-tool-missing');
+      const inBin = st.path && st.path.startsWith(tm.binDir + '/');
+      const label = !st.path ? tr('tools.install') : (st.latest && st.version && st.latest !== st.version ? tr('tools.update') : tr('tools.reinstall'));
+      row.addButton((b) => {
+        b.setButtonText(label).setDisabled(!!tm.busy[name]);
+        if (!st.path || (st.latest && st.version && st.latest !== st.version)) b.setCta();
+        b.onClick(() => this.installTool(name));
+      });
+      if (!inBin && st.path) row.controlEl.setAttr('title', st.path);
+    }
+    new Setting(el).addButton((b) => b.setButtonText(tr('tools.recheck')).onClick(async () => {
+      for (const n of Object.keys(TOOLS)) { try { await tm.latest(n); } catch (e) { /* hors ligne : on garde l'état connu */ } }
+      await tm.checkAll();
+      this.renderTools();
+    }));
+  }
+
+  async installTool(name) {
+    const tm = this.plugin.tools;
+    const label = TOOLS[name].label;
+    const notice = new Notice(tr('tools.downloading', label, '0 %'), 0);
+    try {
+      const st = await tm.install(name, (got, total) => {
+        if (got < 0) notice.setMessage(tr('tools.verifying', label));
+        else notice.setMessage(tr('tools.downloading', label, total ? Math.round(got * 100 / total) + ' %' : Math.round(got / 1048576) + ' Mo'));
+      });
+      notice.hide();
+      new Notice(tr('tools.installed', label, st && st.version ? st.version : ''), 6000);
+    } catch (e) {
+      notice.hide();
+      new Notice(tr('tools.installFailed', label, e.message), 10000);
+    }
+    this.renderTools();
   }
 }
 
@@ -991,8 +1506,23 @@ class VideoDownloaderSettingTab extends PluginSettingTab {
 module.exports = class VideoDownloaderPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
-    this.addSettingTab(new VideoDownloaderSettingTab(this.app, this));
+    const base = this.app.vault.adapter.getBasePath ? this.app.vault.adapter.getBasePath() : '';
+    this.pluginDir = base + '/' + (this.manifest.dir || ('.obsidian/plugins/' + this.manifest.id));
+    this.tools = new ToolManager(this);
+    this.settingTab = new VideoDownloaderSettingTab(this.app, this);
+    this.addSettingTab(this.settingTab);
     this.downloader = new Downloader(this);
+
+    // état des outils au démarrage, sans bloquer ; s'il en manque, on le dit tout de suite
+    this.app.workspace.onLayoutReady(async () => {
+      await this.tools.checkAll();
+      if (this.settingTab.toolsEl) this.settingTab.renderTools();
+      const missing = this.tools.missing();
+      if (missing.length) {
+        const n = new Notice(tr('tools.missingNotice', missing.map((m) => TOOLS[m].label).join(', ')), 15000);
+        n.noticeEl.addEventListener('click', () => this.openSettings());
+      }
+    });
 
     this.statusEl = this.addStatusBarItem();
     this.statusEl.addClass('jxvd-status');
@@ -1019,6 +1549,13 @@ module.exports = class VideoDownloaderPlugin extends Plugin {
 
   onunload() {
     if (this.downloader && this.downloader.current) this.downloader.cancel();
+  }
+
+  openSettings() {
+    const setting = this.app.setting;
+    if (!setting) return;
+    setting.open();
+    setting.openTabById(this.manifest.id);
   }
 
   updateRibbon() {
@@ -1079,6 +1616,8 @@ module.exports = class VideoDownloaderPlugin extends Plugin {
   async loadSettings() {
     const data = await this.loadData();
     SETTINGS = Object.assign({}, DEFAULT_SETTINGS, data);
+    // réglages des versions 0.1–0.2, remplacés par la détection automatique et le nettoyage intégré
+    delete SETTINGS.ffmpegDir; delete SETTINGS.subsFixPath;
     // les dossiers sont un tableau de trois : on complète ce qui manque sans écraser le reste
     const dests = Array.isArray(data && data.destinations) ? data.destinations : DEFAULT_SETTINGS.destinations;
     SETTINGS.destinations = [0, 1, 2].map((i) => Object.assign({ name: '', path: '' }, dests[i] || {}));

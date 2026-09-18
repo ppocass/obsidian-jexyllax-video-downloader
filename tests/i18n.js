@@ -14,8 +14,8 @@ const vides = clesFr.filter((k) => !STRINGS.fr[k] || !STRINGS.en[k]);
 if (!vides.length) ok++; else out.push('traductions vides : ' + vides.join(', '));
 if (tr('notice.queued', '2') === 'Ajouté à la file (2 en attente)') ok++; else out.push('substitution %s cassée : ' + tr('notice.queued', '2'));
 if (resolveLang('en') === 'en' && resolveLang('fr') === 'fr' && ['fr', 'en'].includes(resolveLang('auto'))) ok++; else out.push('resolveLang cassé');
-const attendus = ['language', 'ytdlpPath', 'ffmpegDir', 'subsFixPath', 'cookiesBrowser', 'quality', 'container', 'subtitles', 'subLangs', 'keepTitle', 'destinations', 'menuOnAllLinks'];
+const attendus = ['language', 'ytdlpPath', 'ffmpegPath', 'denoPath', 'cookiesBrowser', 'showAdvanced', 'quality', 'container', 'subtitles', 'subLangs', 'keepTitle', 'destinations', 'menuOnAllLinks', 'showRibbon', 'seriesBase', 'seriesTitle'];
 const absents = attendus.filter((k) => !(k in DEFAULT_SETTINGS));
 if (!absents.length) ok++; else out.push('réglages sans valeur par défaut : ' + absents.join(', '));
-for (const k of ['container.mkv', 'container.mp4', 'container.webm']) { if (k in STRINGS.fr && k in STRINGS.en) ok++; else out.push('clé de famille manquante : ' + k); }
+for (const k of ['container.mkv', 'container.mp4', 'container.webm', 'tools.ytdlp', 'tools.ffmpeg', 'tools.deno', 'job.queued', 'job.running', 'job.done', 'job.failed', 'job.cancelled']) { if (k in STRINGS.fr && k in STRINGS.en) ok++; else out.push('clé de famille manquante : ' + k); }
 out.length ? ('ECHECS:\n' + out.join('\n')) : (ok + ' vérifications (traductions et réglages) passées')

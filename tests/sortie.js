@@ -16,6 +16,8 @@ p = parseLine('ERROR: [youtube] abc: Video unavailable');
 check(p && p.phase === 'error' && p.message === '[youtube] abc: Video unavailable', 'erreur mal lue');
 check(parseLine('[info] abc: Downloading 1 format(s): 137+251') === null, 'ligne sans intérêt retenue');
 check(parseLine('') === null, 'ligne vide retenue');
+const fm = parseLine('JXVD_FILE:/a/b/Titre.mkv');
+check(fm && fm.phase === 'file' && fm.file === '/a/b/Titre.mkv', 'marqueur de fichier mal lu');
 check(parseLine("[Exec] Executing command: '/x/yt-subs-fix.py' '/y.mkv'").phase === 'subs' && parseLine('[SubtitlesConvertor] Converting subtitles').phase === 'subs', 'phase sous-titres non reconnue');
 check(baseName('/a/b/c.mkv') === 'c.mkv' && baseName('c.mkv') === 'c.mkv', 'baseName faux');
 check(safeName('  a/b\\c:d*e?f"g<h>i|j  ') === 'a-b-c-d-e-f-g-h-i-j', 'safeName faux : ' + safeName('  a/b\\c:d*e?f"g<h>i|j  '));
