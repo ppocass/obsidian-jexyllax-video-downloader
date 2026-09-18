@@ -12,7 +12,7 @@ const decalage = clesFr.filter((k) => k in STRINGS.en && (STRINGS.fr[k].split('%
 if (!decalage.length) ok++; else out.push('nombre de %s différent : ' + decalage.join(', '));
 const vides = clesFr.filter((k) => !STRINGS.fr[k] || !STRINGS.en[k]);
 if (!vides.length) ok++; else out.push('traductions vides : ' + vides.join(', '));
-if (tr('notice.queued', '2') === 'Ajouté à la file (2 en attente)') ok++; else out.push('substitution %s cassée : ' + tr('notice.queued', '2'));
+if (tr('notice.queued', '2') === 'Ajouté à la file d\'attente (2 en attente)') ok++; else out.push('substitution %s cassée : ' + tr('notice.queued', '2'));
 if (resolveLang('en') === 'en' && resolveLang('fr') === 'fr' && ['fr', 'en'].includes(resolveLang('auto'))) ok++; else out.push('resolveLang cassé');
 const attendus = ['language', 'ytdlpPath', 'ffmpegPath', 'denoPath', 'cookiesBrowser', 'showAdvanced', 'quality', 'container', 'subtitles', 'subLangs', 'keepTitle', 'destinations', 'menuOnAllLinks', 'showRibbon', 'seriesBase', 'seriesTitle'];
 const absents = attendus.filter((k) => !(k in DEFAULT_SETTINGS));

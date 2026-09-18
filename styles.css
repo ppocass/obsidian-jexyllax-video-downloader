@@ -130,3 +130,19 @@
 
 .jxvd-tool-ok { color: var(--text-success); }
 .jxvd-tool-missing { color: var(--text-error); }
+
+.jxvd-collapsible {
+  cursor: pointer;
+}
+
+.jxvd-chevron {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: var(--size-2-2);
+  color: var(--text-muted);
+}
+
+.jxvd-chevron svg {
+  width: var(--icon-s);
+  height: var(--icon-s);
+}
